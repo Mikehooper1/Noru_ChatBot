@@ -1,0 +1,11 @@
+{
+  "name": "noru-chatbot-widget",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node build.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
+  }
+}
