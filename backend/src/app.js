@@ -15,6 +15,18 @@ const paymentRoutes = require('./routes/payments');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Required behind Railway / Render / any reverse proxy so express-rate-limit
+// reads X-Forwarded-For correctly (avoids ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
+const trustProxy =
+  process.env.TRUST_PROXY !== 'false' &&
+  (process.env.NODE_ENV === 'production' ||
+    process.env.TRUST_PROXY === 'true' ||
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.RENDER);
+if (trustProxy) {
+  app.set('trust proxy', 1);
+}
+
 app.use(cors({ origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

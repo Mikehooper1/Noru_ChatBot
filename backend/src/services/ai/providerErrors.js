@@ -13,6 +13,8 @@ function isRetryableError(error) {
     'quota',
     'insufficient_quota',
     'billing',
+    'prepayment',
+    'depleted',
     'resource_exhausted',
     'too many requests',
     'overloaded',
@@ -27,4 +29,15 @@ function isRetryableError(error) {
   return retryablePatterns.some((pattern) => combined.includes(pattern));
 }
 
-module.exports = { isRetryableError };
+// Model retired / wrong ID — skip to next model in the chain (don't waste retries on other keys).
+function isModelUnavailableError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('not found') ||
+    message.includes('is not supported') ||
+    message.includes('404') ||
+    message.includes('model_not_found')
+  );
+}
+
+module.exports = { isRetryableError, isModelUnavailableError };

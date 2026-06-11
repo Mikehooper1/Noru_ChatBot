@@ -127,7 +127,7 @@ export default function BusinessesPage() {
         ...channelWrites,
         setDoc(doc(db, 'businesses', businessId, 'aiConfig', 'default'), {
           modelTier: 'free',
-          model: 'gemini-2.0-flash-lite',
+          model: 'gemini-2.5-flash-lite',
           systemPrompt: `You are a helpful assistant for ${name}.`,
           temperature: 0.7,
           maxTokens: 1024,

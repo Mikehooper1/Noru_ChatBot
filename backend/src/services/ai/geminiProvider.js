@@ -1,6 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { buildModelChain } = require('./modelMapping');
-const { isRetryableError } = require('./providerErrors');
+const { isRetryableError, isModelUnavailableError } = require('./providerErrors');
 const { resolveGeminiApiKeys } = require('../aiConfigService');
 
 const clientCache = new Map();
@@ -104,10 +104,13 @@ async function complete({
         };
       } catch (error) {
         lastError = error;
-        const retryable = isRetryableError(error);
+        const modelGone = isModelUnavailableError(error);
+        const retryable = !modelGone && isRetryableError(error);
         console.warn(
-          `[AI] Gemini ${modelName} via ${maskKey(apiKey)} failed (${retryable ? 'retryable' : 'hard'}): ${error.message}`
+          `[AI] Gemini ${modelName} via ${maskKey(apiKey)} failed (${modelGone ? 'model unavailable' : retryable ? 'retryable' : 'hard'}): ${error.message}`
         );
+        // Wrong/shutdown model — skip remaining keys, try next model
+        if (modelGone) break;
         if (!retryable) break;
       }
     }

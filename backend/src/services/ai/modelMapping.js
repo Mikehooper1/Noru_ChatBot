@@ -1,40 +1,59 @@
-// Free-tier Gemini models — used by default (best for API free quota).
+// Gemini model catalog — updated June 2026.
+// Gemini 2.0 / 1.5 models are shut down; use 2.5 / 3.x instead.
+
+const LEGACY_MODEL_MAP = {
+  'gemini-2.0-flash-lite': 'gemini-2.5-flash-lite',
+  'gemini-2.0-flash-lite-001': 'gemini-2.5-flash-lite',
+  'gemini-2.0-flash': 'gemini-2.5-flash',
+  'gemini-2.0-flash-001': 'gemini-2.5-flash',
+  'gemini-1.5-flash': 'gemini-2.5-flash-lite',
+  'gemini-1.5-flash-8b': 'gemini-2.5-flash-lite',
+  'gemini-1.5-flash-001': 'gemini-2.5-flash-lite',
+  'gemini-1.5-pro': 'gemini-2.5-pro',
+  'gemini-1.5-pro-002': 'gemini-2.5-pro',
+};
+
+// Free-tier models (default — avoids paid/prepaid quota)
 const FREE_MODELS = [
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3.1-flash-lite',
 ];
 
-// Pro / higher-quota models — only when admin sets modelTier to "pro".
+// Pro models — only when admin sets modelTier to "pro"
 const PRO_MODELS = [
-  'gemini-2.0-flash',
-  'gemini-1.5-pro',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+  'gemini-2.5-pro',
 ];
 
-const DEFAULT_FREE_MODEL = 'gemini-2.0-flash-lite';
-const DEFAULT_PRO_MODEL = 'gemini-2.0-flash';
+const DEFAULT_FREE_MODEL = 'gemini-2.5-flash-lite';
+const DEFAULT_PRO_MODEL = 'gemini-2.5-flash';
+
+function normalizeModel(model) {
+  if (!model || typeof model !== 'string') return model;
+  return LEGACY_MODEL_MAP[model] || model;
+}
 
 function isValidModel(model) {
   return typeof model === 'string' && model.startsWith('gemini');
 }
 
 function isProModel(model) {
-  return PRO_MODELS.includes(model);
+  return PRO_MODELS.includes(normalizeModel(model));
 }
 
 function getPrimaryModel(preferredModel, modelTier = 'free') {
   const tier = modelTier === 'pro' ? 'pro' : 'free';
   const catalog = tier === 'pro' ? PRO_MODELS : FREE_MODELS;
+  const normalized = normalizeModel(preferredModel);
 
-  if (isValidModel(preferredModel) && catalog.includes(preferredModel)) {
-    return preferredModel;
+  if (isValidModel(normalized) && catalog.includes(normalized)) {
+    return normalized;
   }
 
   return tier === 'pro' ? DEFAULT_PRO_MODEL : DEFAULT_FREE_MODEL;
 }
 
-// Free tier → only free models (never burns pro/paid quota).
-// Pro tier  → pro models first, then free models if pro quota is exhausted.
 function buildModelChain(preferredModel, modelTier = 'free') {
   const tier = modelTier === 'pro' ? 'pro' : 'free';
   const catalog = tier === 'pro' ? PRO_MODELS : FREE_MODELS;
@@ -59,6 +78,8 @@ module.exports = {
   PRO_MODELS,
   DEFAULT_FREE_MODEL,
   DEFAULT_PRO_MODEL,
+  LEGACY_MODEL_MAP,
+  normalizeModel,
   isValidModel,
   isProModel,
   getPrimaryModel,

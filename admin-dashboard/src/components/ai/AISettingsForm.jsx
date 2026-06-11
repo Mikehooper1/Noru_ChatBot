@@ -8,7 +8,7 @@ import { api } from '../../services/api';
 export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
   const [form, setForm] = useState({
     modelTier: aiConfig?.modelTier || 'free',
-    model: aiConfig?.model || 'gemini-2.0-flash-lite',
+    model: aiConfig?.model || 'gemini-2.5-flash-lite',
     systemPrompt: aiConfig?.systemPrompt || '',
     temperature: aiConfig?.temperature ?? 0.7,
     maxTokens: aiConfig?.maxTokens || 1024,
@@ -35,7 +35,7 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
     setForm((prev) => ({
       ...prev,
       modelTier: aiConfig?.modelTier || 'free',
-      model: aiConfig?.model || 'gemini-2.0-flash-lite',
+      model: aiConfig?.model || 'gemini-2.5-flash-lite',
       systemPrompt: aiConfig?.systemPrompt || '',
       temperature: aiConfig?.temperature ?? 0.7,
       maxTokens: aiConfig?.maxTokens || 1024,
@@ -168,7 +168,7 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
             setForm({
               ...form,
               modelTier: tier,
-              model: tier === 'pro' ? 'gemini-2.0-flash' : 'gemini-2.0-flash-lite',
+              model: tier === 'pro' ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite',
             });
           }}
           options={[
@@ -184,13 +184,13 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
           options={
             form.modelTier === 'pro'
               ? [
-                  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-                  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (most capable)' },
+                  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+                  { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+                  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (most capable)' },
                 ]
               : [
-                  { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (recommended)' },
-                  { value: 'gemini-1.5-flash-8b', label: 'Gemini 1.5 Flash 8B' },
-                  { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+                  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (recommended)' },
+                  { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
                 ]
           }
         />

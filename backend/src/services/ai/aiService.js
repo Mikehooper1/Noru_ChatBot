@@ -1,6 +1,7 @@
 const { getBusinessAIConfig, logError } = require('../../firebase/admin');
 const { buildSystemPrompt, shouldHandoff } = require('./buildSystemPrompt');
 const geminiProvider = require('./geminiProvider');
+const { normalizeModel } = require('./modelMapping');
 const { resolveGeminiApiKeys } = require('../aiConfigService');
 
 (function logProviderStatus() {
@@ -46,7 +47,7 @@ async function getAIResponse(businessId, conversationHistory, userMessage, sessi
       aiConfig,
       systemPrompt,
       messages,
-      preferredModel: aiConfig.model,
+      preferredModel: normalizeModel(aiConfig.model) || aiConfig.model,
       maxTokens: aiConfig.maxTokens || 1024,
       temperature: aiConfig.temperature ?? 0.7,
     });
@@ -61,6 +62,15 @@ async function getAIResponse(businessId, conversationHistory, userMessage, sessi
       new Error(`Gemini failed for business ${businessId}: ${error.message}`),
       businessId
     ).catch(() => {});
+
+    const msg = String(error.message || '').toLowerCase();
+    if (msg.includes('prepayment') || msg.includes('depleted') || msg.includes('billing')) {
+      return (
+        aiConfig.fallbackMessage ||
+        'Our AI is temporarily unavailable — Gemini API credits need to be topped up at https://ai.google.dev. Please try again later.'
+      );
+    }
+
     return aiConfig.fallbackMessage ||
       'Thanks for your message! Our AI is briefly at capacity — please try again in a minute.';
   }
