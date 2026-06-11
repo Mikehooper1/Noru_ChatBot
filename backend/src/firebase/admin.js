@@ -185,7 +185,7 @@ async function getBusinessAIConfig(businessId) {
   }
   return {
     modelTier: 'free',
-    model: 'gemini-2.5-flash-lite',
+    model: 'gemini-2.5-flash',
     systemPrompt: 'You are a helpful business assistant.',
     temperature: 0.7,
     maxTokens: 1024,

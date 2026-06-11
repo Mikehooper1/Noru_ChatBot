@@ -8,7 +8,7 @@ import { api } from '../../services/api';
 export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
   const [form, setForm] = useState({
     modelTier: aiConfig?.modelTier || 'free',
-    model: aiConfig?.model || 'gemini-2.5-flash-lite',
+    model: aiConfig?.model || 'gemini-2.5-flash',
     systemPrompt: aiConfig?.systemPrompt || '',
     temperature: aiConfig?.temperature ?? 0.7,
     maxTokens: aiConfig?.maxTokens || 1024,
@@ -35,7 +35,7 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
     setForm((prev) => ({
       ...prev,
       modelTier: aiConfig?.modelTier || 'free',
-      model: aiConfig?.model || 'gemini-2.5-flash-lite',
+      model: aiConfig?.model || 'gemini-2.5-flash',
       systemPrompt: aiConfig?.systemPrompt || '',
       temperature: aiConfig?.temperature ?? 0.7,
       maxTokens: aiConfig?.maxTokens || 1024,
@@ -168,7 +168,7 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
             setForm({
               ...form,
               modelTier: tier,
-              model: tier === 'pro' ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite',
+              model: tier === 'pro' ? 'gemini-2.5-flash' : 'gemini-2.5-flash',
             });
           }}
           options={[
@@ -188,16 +188,17 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
                   { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
                   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (most capable)' },
                 ]
-              : [
-                  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (recommended)' },
-                  { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-                ]
+              : [{ value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (free tier)' }]
           }
         />
 
         {form.modelTier === 'free' && (
           <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-            Free tier active — the agent will <strong>not</strong> use Pro models, so you avoid quota-exhausted errors on paid models.
+            Free tier uses <strong>Gemini 2.5 Flash</strong> only. Get a key at{' '}
+            <a href="https://aistudio.google.com/apikey" className="underline" target="_blank" rel="noreferrer">
+              aistudio.google.com/apikey
+            </a>{' '}
+            from a project <strong>without billing</strong> if you see &quot;prepayment credits depleted&quot;.
           </p>
         )}
 

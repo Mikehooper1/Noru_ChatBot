@@ -64,8 +64,8 @@ GEMINI_API_KEY=AIzaKey1
 # Or numbered keys
 GEMINI_API_KEY_2=AIzaKey2
 
-GEMINI_MODEL=gemini-2.5-flash-lite
-GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=gemini-2.5-flash
 ```
 
 Get keys at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).

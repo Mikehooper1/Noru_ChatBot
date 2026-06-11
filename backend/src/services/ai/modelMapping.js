@@ -2,22 +2,22 @@
 // Gemini 2.0 / 1.5 models are shut down; use 2.5 / 3.x instead.
 
 const LEGACY_MODEL_MAP = {
-  'gemini-2.0-flash-lite': 'gemini-2.5-flash-lite',
-  'gemini-2.0-flash-lite-001': 'gemini-2.5-flash-lite',
+  'gemini-2.0-flash-lite': 'gemini-2.5-flash',
+  'gemini-2.0-flash-lite-001': 'gemini-2.5-flash',
   'gemini-2.0-flash': 'gemini-2.5-flash',
   'gemini-2.0-flash-001': 'gemini-2.5-flash',
-  'gemini-1.5-flash': 'gemini-2.5-flash-lite',
-  'gemini-1.5-flash-8b': 'gemini-2.5-flash-lite',
-  'gemini-1.5-flash-001': 'gemini-2.5-flash-lite',
+  'gemini-2.5-flash-lite': 'gemini-2.5-flash',
+  'gemini-2.5-flash-lite-001': 'gemini-2.5-flash',
+  'gemini-3.1-flash-lite': 'gemini-2.5-flash',
+  'gemini-1.5-flash': 'gemini-2.5-flash',
+  'gemini-1.5-flash-8b': 'gemini-2.5-flash',
+  'gemini-1.5-flash-001': 'gemini-2.5-flash',
   'gemini-1.5-pro': 'gemini-2.5-pro',
   'gemini-1.5-pro-002': 'gemini-2.5-pro',
 };
 
-// Free-tier models (default — avoids paid/prepaid quota)
-const FREE_MODELS = [
-  'gemini-2.5-flash-lite',
-  'gemini-3.1-flash-lite',
-];
+// Free-tier Flash only — gemini-2.5-flash has a no-billing free quota in AI Studio.
+const FREE_MODELS = ['gemini-2.5-flash'];
 
 // Pro models — only when admin sets modelTier to "pro"
 const PRO_MODELS = [
@@ -26,7 +26,7 @@ const PRO_MODELS = [
   'gemini-2.5-pro',
 ];
 
-const DEFAULT_FREE_MODEL = 'gemini-2.5-flash-lite';
+const DEFAULT_FREE_MODEL = 'gemini-2.5-flash';
 const DEFAULT_PRO_MODEL = 'gemini-2.5-flash';
 
 function normalizeModel(model) {

@@ -67,7 +67,7 @@ async function getAIResponse(businessId, conversationHistory, userMessage, sessi
     if (msg.includes('prepayment') || msg.includes('depleted') || msg.includes('billing')) {
       return (
         aiConfig.fallbackMessage ||
-        'Our AI is temporarily unavailable — Gemini API credits need to be topped up at https://ai.google.dev. Please try again later.'
+        'Gemini API key has no credits left. Use a free-tier key from aistudio.google.com/apikey (no billing linked), or top up at https://ai.studio/projects.'
       );
     }
 

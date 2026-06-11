@@ -12,9 +12,6 @@ function isRetryableError(error) {
     'ratelimit',
     'quota',
     'insufficient_quota',
-    'billing',
-    'prepayment',
-    'depleted',
     'resource_exhausted',
     'too many requests',
     'overloaded',
@@ -40,4 +37,14 @@ function isModelUnavailableError(error) {
   );
 }
 
-module.exports = { isRetryableError, isModelUnavailableError };
+// Prepay balance $0 — retrying other models/keys on the same project will not help.
+function isBillingDepletedError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('prepayment credits are depleted') ||
+    message.includes('prepay') && message.includes('depleted') ||
+    message.includes('purchase prepaid credits')
+  );
+}
+
+module.exports = { isRetryableError, isModelUnavailableError, isBillingDepletedError };

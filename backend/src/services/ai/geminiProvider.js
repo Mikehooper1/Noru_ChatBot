@@ -1,6 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { buildModelChain } = require('./modelMapping');
-const { isRetryableError, isModelUnavailableError } = require('./providerErrors');
+const { isRetryableError, isModelUnavailableError, isBillingDepletedError } = require('./providerErrors');
 const { resolveGeminiApiKeys } = require('../aiConfigService');
 
 const clientCache = new Map();
@@ -104,11 +104,14 @@ async function complete({
         };
       } catch (error) {
         lastError = error;
+        const billingBlocked = isBillingDepletedError(error);
         const modelGone = isModelUnavailableError(error);
-        const retryable = !modelGone && isRetryableError(error);
+        const retryable = !billingBlocked && !modelGone && isRetryableError(error);
         console.warn(
-          `[AI] Gemini ${modelName} via ${maskKey(apiKey)} failed (${modelGone ? 'model unavailable' : retryable ? 'retryable' : 'hard'}): ${error.message}`
+          `[AI] Gemini ${modelName} via ${maskKey(apiKey)} failed (${billingBlocked ? 'billing blocked' : modelGone ? 'model unavailable' : retryable ? 'retryable' : 'hard'}): ${error.message}`
         );
+        // Prepay $0 on this key — try the next API key (e.g. env fallback)
+        if (billingBlocked) continue;
         // Wrong/shutdown model — skip remaining keys, try next model
         if (modelGone) break;
         if (!retryable) break;

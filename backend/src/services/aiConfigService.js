@@ -22,10 +22,7 @@ function decryptGeminiKeys(encryptedKeys = []) {
   return encryptedKeys.map((k) => decrypt(k)).filter(Boolean);
 }
 
-function resolveGeminiApiKeys(aiConfig) {
-  const fromConfig = decryptGeminiKeys(aiConfig?.geminiApiKeysEncrypted);
-  if (fromConfig.length) return fromConfig;
-
+function collectEnvGeminiKeys() {
   const keys = [];
   const push = (raw) => {
     if (!raw) return;
@@ -41,6 +38,18 @@ function resolveGeminiApiKeys(aiConfig) {
     push(process.env[`GEMINI_API_KEY_${i}`]);
   }
   return keys;
+}
+
+function resolveGeminiApiKeys(aiConfig) {
+  const fromConfig = decryptGeminiKeys(aiConfig?.geminiApiKeysEncrypted);
+  const fromEnv = collectEnvGeminiKeys();
+  if (!fromConfig.length) return fromEnv;
+  // Admin keys first, then .env keys as fallback (skip duplicates)
+  const merged = [...fromConfig];
+  for (const key of fromEnv) {
+    if (!merged.includes(key)) merged.push(key);
+  }
+  return merged;
 }
 
 async function getAIConfigForAdmin(businessId) {
@@ -60,7 +69,7 @@ async function saveAIConfig(businessId, body) {
   const existing = (await ref.get()).data() || {};
   const payload = {
     modelTier: body.modelTier === 'pro' ? 'pro' : 'free',
-    model: body.model || (body.modelTier === 'pro' ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite'),
+    model: body.model || (body.modelTier === 'pro' ? 'gemini-2.5-flash' : 'gemini-2.5-flash'),
     systemPrompt: body.systemPrompt || '',
     temperature: body.temperature ?? 0.7,
     maxTokens: body.maxTokens || 1024,
