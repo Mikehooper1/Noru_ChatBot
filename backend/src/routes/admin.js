@@ -3,6 +3,8 @@ const { verifyFirebaseToken } = require('../middleware/auth');
 const { getDailyAnalytics, getAnalyticsRange } = require('../controllers/analyticsController');
 const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
 const SessionManager = require('../services/sessionManager');
+const { deliverAgentReply } = require('../services/conversationDeliveryService');
+const { trackEvent } = require('../services/analyticsService');
 const { getDb } = require('../firebase/admin');
 const { sanitizeInput } = require('../utils/sanitize');
 
@@ -34,9 +36,30 @@ router.post('/api/conversations/:id/reply', verifyFirebaseToken, async (req, res
     const { message } = req.body;
     const conversationId = req.params.id;
     const sanitized = sanitizeInput(message);
+    if (!sanitized) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const convDoc = await getDb().collection('conversations').doc(conversationId).get();
+    if (!convDoc.exists) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    const conversation = { id: convDoc.id, ...convDoc.data() };
 
     await SessionManager.saveMessage(conversationId, 'agent', sanitized);
-    res.json({ success: true });
+    await SessionManager.updateConversation(conversationId, {});
+
+    const delivery = await deliverAgentReply(conversation, sanitized);
+    if (delivery.delivered) {
+      await trackEvent(conversation.businessId, conversation.channel, 'message_sent');
+    }
+
+    res.json({
+      success: true,
+      delivered: delivery.delivered,
+      channel: conversation.channel,
+      deliveryError: delivery.error || delivery.note || null,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

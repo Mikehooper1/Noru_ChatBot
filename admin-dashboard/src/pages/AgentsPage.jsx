@@ -30,8 +30,13 @@ function ConversationPanel({ conversation, onClose }) {
     if (!reply.trim()) return;
     setSending(true);
     try {
-      await api.replyToConversation(conversation.id, reply);
+      const result = await api.replyToConversation(conversation.id, reply);
       setReply('');
+      if (result.delivered === false && result.deliveryError) {
+        alert(
+          `Message saved in inbox but not sent on ${conversation.channel}: ${result.deliveryError}`
+        );
+      }
     } catch (err) {
       alert(err.message);
     }
