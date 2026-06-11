@@ -145,10 +145,30 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                 <Input label="Phone Number ID" value={form.phoneNumberId || ''} onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })} placeholder="From Meta → WhatsApp → API Setup" />
                 <Input label="Access Token" type="password" value={form.accessToken || ''} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} placeholder="Permanent token from Meta Business" />
                 <Input label="Verify Token" value={form.verifyToken || ''} onChange={(e) => setForm({ ...form, verifyToken: e.target.value })} placeholder="Same as WHATSAPP_VERIFY_TOKEN on backend" />
+                <Input
+                  label="Admin WhatsApp number (booking alerts)"
+                  value={form.adminNotifyPhone || ''}
+                  onChange={(e) => setForm({ ...form, adminNotifyPhone: e.target.value })}
+                  placeholder="919876543210 — country code + number, no + or spaces"
+                />
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">WhatsApp alert on new booking</p>
+                    <p className="text-xs text-gray-500">Send appointment details to the admin number above</p>
+                  </div>
+                  <Toggle
+                    enabled={form.notifyOnBooking !== false}
+                    onChange={(v) => setForm({ ...form, notifyOnBooking: v })}
+                  />
+                </div>
                 <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
                   <p className="font-semibold">Webhook URL (paste in Meta Developer Console)</p>
                   <code className="block break-all bg-white px-2 py-1 rounded border">{`${BACKEND_URL}/webhook/whatsapp`}</code>
                   <p>Subscribe to <strong>messages</strong>. Set verify token to match backend <code>WHATSAPP_VERIFY_TOKEN</code>.</p>
+                  <p>
+                    For booking alerts, save your personal WhatsApp number above, then send <strong>Hi</strong> once to
+                    your business WhatsApp number so Meta allows outbound messages to you.
+                  </p>
                   <p>Requires <strong>Pro</strong> plan. Toggle WhatsApp on after saving credentials.</p>
                 </div>
               </>

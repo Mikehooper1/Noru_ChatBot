@@ -227,8 +227,10 @@ Click **Verify and Save**. Meta sends a GET request; the backend must respond wi
 1. **Upgrade to Pro** (Plans page) if on Free
 2. Go to **Channels → WhatsApp → Configure**
 3. Enter **Phone Number ID** and **Access Token** from Meta
-4. Save, then **toggle WhatsApp ON**
-5. Ensure **AI is enabled** (AI Settings) and you have flows or AI fallback configured
+4. Enter your **Admin WhatsApp number** (country code + number, e.g. `919876543210`) to receive a WhatsApp message whenever someone books
+5. Save, then **toggle WhatsApp ON**
+6. Send **Hi** once from your admin phone to your business WhatsApp number (Meta requires this before outbound alerts)
+7. Ensure **AI is enabled** (AI Settings) and you have flows or AI fallback configured
 
 ### Step 5 — Test
 
@@ -251,7 +253,7 @@ Customer WhatsApp message
 | Messages not received | Subscribe to **messages** field in Meta |
 | No AI reply | Check Phone Number ID matches Meta; channel toggled ON; Pro plan active |
 | Upgrade message instead | Business is on Free plan — upgrade to Pro |
-| 403 from Meta API | Access token expired or wrong; regenerate in Meta |
+| No admin booking alert | Set admin number in Channels → WhatsApp; send Hi to business number once; WhatsApp channel must be ON |
 
 The webhook URL is also shown inside **Channels → WhatsApp → Configure** in the admin dashboard.
 

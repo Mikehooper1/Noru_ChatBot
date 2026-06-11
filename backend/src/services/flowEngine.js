@@ -3,6 +3,7 @@ const { getAIResponse, shouldHandoff } = require('./ai/aiService');
 const SessionManager = require('./sessionManager');
 const { sanitizeInput } = require('../utils/sanitize');
 const { trackEvent } = require('./analyticsService');
+const { notifyAdminNewBooking } = require('./appointmentNotificationService');
 const { v4: uuidv4 } = require('uuid');
 
 const GREETING_PATTERN = /^(hi|hello|hey|hola|namaste|start|menu|help|good\s*(morning|afternoon|evening)|yo|sup)[!.?\s]*$/i;
@@ -183,6 +184,7 @@ class FlowEngine {
 
     await this.db.collection('appointments').doc(appointmentId).set(appointment);
     await trackEvent(this.businessId, conv.channel || 'website', 'appointment');
+    await notifyAdminNewBooking(this.businessId, appointment);
 
     await SessionManager.updateConversation(this.conversationId, {
       currentFlowId: null,

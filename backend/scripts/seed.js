@@ -134,7 +134,14 @@ async function seed() {
           position: 'bottom-right',
           embedCode: `<script>window.BotConfig={businessId:"${businessId}",primaryColor:"#4F46E5",position:"bottom-right"};</script><script src="http://localhost:3000/widget.min.js"></script>`,
         }),
-        ...(ch === 'whatsapp' && { phoneNumberId: '', accessToken: encrypt(''), verifyToken: '', webhookUrl: '' }),
+        ...(ch === 'whatsapp' && {
+          phoneNumberId: '',
+          accessToken: encrypt(''),
+          verifyToken: '',
+          webhookUrl: '',
+          adminNotifyPhone: '',
+          notifyOnBooking: true,
+        }),
         ...(ch === 'telegram' && { botToken: encrypt(''), botUsername: '', webhookUrl: '' }),
         ...(ch === 'instagram' && { accessToken: encrypt(''), pageId: '', enabled: false }),
       });

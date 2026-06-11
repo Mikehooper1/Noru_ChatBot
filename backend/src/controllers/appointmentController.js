@@ -5,6 +5,7 @@ const { trackEvent } = require('../services/analyticsService');
 const { sanitizeObject } = require('../utils/sanitize');
 const WhatsAppService = require('../services/whatsappService');
 const { sendBookingConfirmation } = require('../services/telegramService');
+const { notifyAdminNewBooking } = require('../services/appointmentNotificationService');
 
 async function createAppointment(req, res) {
   try {
@@ -47,6 +48,8 @@ async function createAppointment(req, res) {
     } else if (data.channel === 'telegram' && data.userId) {
       await sendBookingConfirmation(data.businessId, data.userId, appointment);
     }
+
+    await notifyAdminNewBooking(data.businessId, appointment);
 
     res.status(201).json({ id: appointmentId, ...appointment });
   } catch (error) {
