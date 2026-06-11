@@ -8,7 +8,7 @@ import { api } from '../../services/api';
 
 export default function AISettingsForm({ businessId, aiConfig }) {
   const [form, setForm] = useState({
-    model: aiConfig?.model || 'gpt-4o',
+    model: aiConfig?.model || 'gemini-2.0-flash',
     systemPrompt: aiConfig?.systemPrompt || '',
     temperature: aiConfig?.temperature ?? 0.7,
     maxTokens: aiConfig?.maxTokens || 1024,
@@ -61,20 +61,19 @@ export default function AISettingsForm({ businessId, aiConfig }) {
           />
         </div>
         <p className="text-xs text-gray-500">
-          When AI is on, rate limits auto-switch between OpenAI and Gemini without showing errors to users.
+          When AI is on, requests auto-rotate across your Gemini API keys — if one hits its
+          rate limit, the next key (then a fallback model) is used automatically, with no error shown to users.
         </p>
         <Select
-          label="Model"
+          label="Model (Gemini)"
           value={form.model}
           onChange={(e) => setForm({ ...form, model: e.target.value })}
           options={[
-            { value: 'gpt-4o', label: 'GPT-4o (OpenAI)' },
-            { value: 'gpt-4o-mini', label: 'GPT-4o Mini (OpenAI)' },
-            { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (OpenAI)' },
-            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-            { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
+            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (recommended)' },
+            { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (fastest)' },
             { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+            { value: 'gemini-1.5-flash-8b', label: 'Gemini 1.5 Flash 8B' },
+            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (most capable)' },
           ]}
         />
         <Select

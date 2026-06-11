@@ -169,7 +169,7 @@ async function seed() {
     });
 
     batch.set(bizRef.collection('aiConfig').doc('default'), {
-      model: 'gpt-4o',
+      model: 'gemini-2.0-flash',
       systemPrompt: biz.systemPrompt,
       temperature: 0.7,
       maxTokens: 1024,

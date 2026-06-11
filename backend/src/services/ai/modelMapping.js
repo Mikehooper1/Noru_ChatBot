@@ -1,57 +1,43 @@
-const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'];
+// Gemini-only model configuration.
+// Ordered by preference: fast/cheap first, stronger models as fallback.
 const GEMINI_MODELS = [
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
   'gemini-1.5-flash',
-  'gemini-1.5-pro',
   'gemini-1.5-flash-8b',
+  'gemini-1.5-pro',
 ];
 
-function getProviderForModel(model) {
-  if (!model) return null;
-  if (model.startsWith('gemini')) return 'gemini';
-  if (model.startsWith('gpt-')) return 'openai';
-  return null;
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+
+function isValidModel(model) {
+  return typeof model === 'string' && model.startsWith('gemini');
 }
 
-function getModelForProvider(provider, preferredModel) {
-  if (provider === 'openai') {
-    if (OPENAI_MODELS.includes(preferredModel)) return preferredModel;
-    return process.env.OPENAI_FALLBACK_MODEL || 'gpt-4o-mini';
-  }
-  if (provider === 'gemini') {
-    if (GEMINI_MODELS.includes(preferredModel) || preferredModel?.startsWith('gemini')) {
-      return preferredModel;
-    }
-    return process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.0-flash';
-  }
-  return preferredModel;
+function getPrimaryModel(preferredModel) {
+  if (isValidModel(preferredModel)) return preferredModel;
+  return DEFAULT_MODEL;
 }
 
-function buildProviderChain(preferredModel) {
-  const order = (process.env.AI_PROVIDER_ORDER || 'openai,gemini')
-    .split(',')
-    .map((p) => p.trim().toLowerCase())
-    .filter(Boolean);
-
-  const primary = getProviderForModel(preferredModel);
-  const chain = [];
-
-  if (primary && order.includes(primary)) {
-    chain.push(primary);
+// Builds the ordered list of models to try: preferred first, then the rest
+// of the catalog as fallback (so a model-specific outage still gets answered).
+function buildModelChain(preferredModel) {
+  const primary = getPrimaryModel(preferredModel);
+  const chain = [primary];
+  for (const model of GEMINI_MODELS) {
+    if (!chain.includes(model)) chain.push(model);
   }
-
-  for (const provider of order) {
-    if (!chain.includes(provider)) chain.push(provider);
+  const fallback = process.env.GEMINI_FALLBACK_MODEL;
+  if (fallback && isValidModel(fallback) && !chain.includes(fallback)) {
+    chain.push(fallback);
   }
-
-  return chain.length ? chain : ['openai', 'gemini'];
+  return chain;
 }
 
 module.exports = {
-  OPENAI_MODELS,
   GEMINI_MODELS,
-  getProviderForModel,
-  getModelForProvider,
-  buildProviderChain,
+  DEFAULT_MODEL,
+  isValidModel,
+  getPrimaryModel,
+  buildModelChain,
 };

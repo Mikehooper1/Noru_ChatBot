@@ -9,6 +9,8 @@ import OverviewStats from '../components/dashboard/OverviewStats';
 import BotIdentityForm from '../components/dashboard/BotIdentityForm';
 import RecentConversations from '../components/dashboard/RecentConversations';
 import { Button } from '../components/shared/Button';
+import Icon from '../components/shared/Icon';
+import { EmptyState } from '../components/shared/Card';
 
 export default function Dashboard() {
   const { currentBusiness, businesses, setCurrentBusiness } = useBusiness();
@@ -80,26 +82,35 @@ export default function Dashboard() {
 
   if (!currentBusiness) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-gray-500">No business found. Run the seed script to create sample data.</p>
+      <div className="p-6">
+        <div className="card">
+          <EmptyState
+            icon={<Icon name="bot" className="w-6 h-6" />}
+            title="No chatbot yet"
+            description="Create your first AI chatbot agent to start chatting with customers on your website, WhatsApp and Telegram."
+            action={<Link to="/businesses"><Button><Icon name="plus" className="w-4 h-4" /> Create chatbot</Button></Link>}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="page-title">Dashboard</h2>
+          <p className="page-subtitle">Overview for <span className="font-medium text-ink-soft">{currentBusiness.name}</span></p>
+        </div>
         <div className="flex gap-2 flex-wrap">
-          <Link to="/agents"><Button variant="secondary">Agent Inbox</Button></Link>
-          <Link to="/appointments"><Button variant="secondary">Appointments</Button></Link>
-          <Link to="/businesses"><Button variant="secondary">My Chatbots</Button></Link>
+          <Link to="/agents"><Button variant="secondary"><Icon name="inbox" className="w-4 h-4" /> Agent Inbox</Button></Link>
+          <Link to="/appointments"><Button variant="secondary"><Icon name="calendar" className="w-4 h-4" /> Appointments</Button></Link>
           <Button
             id="delete-current-chatbot"
             variant="danger"
             onClick={() => { setShowDeleteModal(true); setDeleteError(''); }}
           >
-            🗑 Delete Chatbot
+            <Icon name="trash" className="w-4 h-4" /> Delete
           </Button>
         </div>
       </div>

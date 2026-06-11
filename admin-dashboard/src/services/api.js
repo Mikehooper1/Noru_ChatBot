@@ -1,6 +1,33 @@
 import { auth } from '../firebase/auth';
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+// Normalize the backend URL so a missing scheme (e.g. "host.up.railway.app")
+// or a trailing slash can't silently turn requests into relative paths that
+// hit the dev server and return an empty body.
+function normalizeBaseUrl(url) {
+  let u = (url || 'http://localhost:3000').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+  return u;
+}
+
+const BASE_URL = normalizeBaseUrl(import.meta.env.VITE_BACKEND_URL);
+
+// Safely parse a response body as JSON, surfacing a clear error instead of
+// the cryptic "Unexpected end of JSON input" when the body is empty/HTML.
+async function parseJsonSafe(res) {
+  const text = await res.text();
+  if (!text) {
+    throw new Error(
+      `Backend returned an empty response (HTTP ${res.status}). Check VITE_BACKEND_URL and that the backend is running.`
+    );
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      'Backend returned a non-JSON response. Check VITE_BACKEND_URL points to your backend (with https://), not the dashboard.'
+    );
+  }
+}
 
 async function getAuthHeaders() {
   const user = auth.currentUser;
@@ -17,9 +44,9 @@ async function request(path, options = {}) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || res.statusText);
+    throw new Error(err.error || res.statusText || `Request failed (${res.status})`);
   }
-  return res.json();
+  return parseJsonSafe(res);
 }
 
 export const api = {
@@ -49,7 +76,7 @@ export const api = {
     request(`/api/conversations/${id}/reply`, { method: 'POST', body: JSON.stringify({ message }) }),
   resolveConversation: (id) =>
     request(`/api/conversations/${id}/resolve`, { method: 'POST' }),
-  getPlans: () => fetch(`${BASE_URL}/api/plans`).then((r) => r.json()),
+  getPlans: () => fetch(`${BASE_URL}/api/plans`).then(parseJsonSafe),
   createPaymentOrder: (businessId, planId) =>
     request('/api/payments/create-order', {
       method: 'POST',
@@ -63,6 +90,8 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ businessId, message, sessionId }),
     });
-    return res.json();
+    const data = await parseJsonSafe(res);
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
   },
 };

@@ -95,7 +95,7 @@ async function getBusinessAIConfig(businessId) {
     .doc('default')
     .get();
   return doc.exists ? doc.data() : {
-    model: 'gpt-4o',
+    model: 'gemini-2.0-flash',
     systemPrompt: 'You are a helpful business assistant.',
     temperature: 0.7,
     maxTokens: 1024,

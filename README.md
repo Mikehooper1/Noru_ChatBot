@@ -10,7 +10,7 @@ Production-ready, multi-tenant **AI agent** SaaS that chats with customers, take
 | Backend | Node.js 20 + Express |
 | Database | Firebase Firestore |
 | Auth | Firebase Authentication |
-| AI | OpenAI + Gemini with automatic failover |
+| AI | Google Gemini with automatic multi-key failover |
 | Channels | WhatsApp Cloud API, Telegram Bot API, Website Widget, Instagram (Enterprise) |
 | Billing | Razorpay (UPI, Cards) with mock mode for local testing |
 
@@ -19,7 +19,7 @@ Production-ready, multi-tenant **AI agent** SaaS that chats with customers, take
 - Node.js 20+
 - Firebase CLI (`npm install -g firebase-tools`)
 - Firebase project with Firestore, Auth, and Storage enabled
-- OpenAI API key and/or Gemini API key
+- One or more **Google Gemini API keys** (free tier works — add several for higher throughput)
 - Meta Developer account (WhatsApp)
 - Telegram BotFather bot token (optional)
 
@@ -50,7 +50,25 @@ Production-ready, multi-tenant **AI agent** SaaS that chats with customers, take
 cp backend/.env.example backend/.env
 ```
 
-Fill in Firebase Admin credentials, AI API keys (OpenAI and/or Gemini), WhatsApp verify token, and Razorpay keys (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`). Without Razorpay keys, payments run in **mock mode** for testing.
+Fill in Firebase Admin credentials, **Gemini API keys**, WhatsApp verify token, and Razorpay keys (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`). Without Razorpay keys, payments run in **mock mode** for testing.
+
+### Gemini multi-key failover
+
+The AI agent uses **Google Gemini only**. Add as many keys as you like — when one hits its rate/quota limit, the agent automatically rotates to the next key (round-robin), and then to a fallback model, with no error shown to the customer:
+
+```bash
+# Recommended: comma-separated list
+GEMINI_API_KEYS=AIzaKey1,AIzaKey2,AIzaKey3
+# Or a single key
+GEMINI_API_KEY=AIzaKey1
+# Or numbered keys
+GEMINI_API_KEY_2=AIzaKey2
+
+GEMINI_MODEL=gemini-2.0-flash
+GEMINI_FALLBACK_MODEL=gemini-1.5-flash
+```
+
+Get keys at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
 
 **Admin Dashboard** — copy `admin-dashboard/.env.example` to `admin-dashboard/.env`:
 
@@ -288,7 +306,7 @@ Upgrade in **Admin → Plans** (UPI / Card via Razorpay). When limits are hit, t
 
 1. Customer messages on **website**, **WhatsApp**, or **Telegram** (channel gated by plan)
 2. **Flow engine** runs booking flows first (appointments, FAQs, handoff)
-3. **AI** (OpenAI + Gemini failover) answers questions the flow does not cover
+3. **AI** (Gemini, multi-key failover) answers questions the flow does not cover
 4. **Appointments** are saved to Firestore; admins see them in real time
 5. **Reminders** cron (every 15 min) sends WhatsApp/Telegram reminders on Pro+ plans
 
@@ -296,7 +314,7 @@ Upgrade in **Admin → Plans** (UPI / Card via Razorpay). When limits are hit, t
 
 - Multi-tenant business management
 - Visual flow builder with drag-and-drop steps
-- Multi-provider AI (OpenAI + Gemini) with automatic failover on rate limits
+- Gemini AI with automatic multi-key round-robin + model failover on rate limits
 - AI fallback when no flow matches
 - WhatsApp, Telegram, and website widget channels
 - Appointment booking with Google Calendar sync

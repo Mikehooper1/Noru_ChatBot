@@ -1,7 +1,7 @@
 {
   "name": "noru-chatbot-backend",
-  "version": "1.0.0",
-  "description": "Multi-tenant AI chatbot backend — WhatsApp, Telegram, Widget",
+  "version": "2.0.0",
+  "description": "Multi-tenant AI agent backend (Gemini) — WhatsApp, Telegram, Widget",
   "main": "src/app.js",
   "scripts": {
     "dev": "nodemon src/app.js",
@@ -24,7 +24,6 @@
     "googleapis": "^144.0.0",
     "node-cron": "^3.0.3",
     "node-telegram-bot-api": "^0.66.0",
-    "openai": "^4.104.0",
     "sanitize-html": "^2.14.0",
     "uuid": "^11.0.5"
   },

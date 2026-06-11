@@ -20,8 +20,11 @@ function ProtectedLayout({ children }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-surface-subtle">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-brand-gradient animate-pulse" />
+          <p className="text-ink-muted text-sm">Loading your workspace…</p>
+        </div>
       </div>
     );
   }
@@ -29,11 +32,11 @@ function ProtectedLayout({ children }) {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-surface-subtle">
       <Sidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <TopBar />
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto animate-fade-in">{children}</main>
       </div>
     </div>
   );

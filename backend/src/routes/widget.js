@@ -16,18 +16,40 @@ function resolveWidgetFile() {
   return WIDGET_PATHS.find((filePath) => fs.existsSync(filePath)) || null;
 }
 
+// Always respond as JavaScript so a <script src> never receives HTML
+// (which causes the classic "Uncaught SyntaxError: Unexpected token '<'").
 function serveWidget(_req, res) {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
   const file = resolveWidgetFile();
   if (!file) {
-    return res.status(404).json({
-      error: 'Widget not found on server',
-      hint: 'Run: cd backend && npm run copy-widget',
-      urls: ['/widget.min.js', '/widget.js'],
-    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res
+      .status(200)
+      .send(
+        'console.error("[Noru ChatBot] widget.min.js is missing on the server. ' +
+          'Run \\"npm run copy-widget\\" in the backend and redeploy.");'
+      );
   }
-  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Cache-Control', 'public, max-age=300');
   res.sendFile(file);
+}
+
+// Lightweight diagnostic: tells you instantly whether the widget is served
+// correctly from THIS backend. Open it in a browser.
+function widgetStatus(req, res) {
+  const file = resolveWidgetFile();
+  const base = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+  res.json({
+    ok: !!file,
+    served: !!file,
+    scriptUrl: `${base.replace(/\/$/, '')}/widget.min.js`,
+    file: file || null,
+    hint: file
+      ? 'Widget is being served correctly. Use scriptUrl as your <script src>.'
+      : 'Widget file missing. Run "npm run copy-widget" in backend and redeploy.',
+  });
 }
 
 async function getWebsiteChannel(businessId) {
@@ -91,5 +113,6 @@ router.get('/api/widget/config/:businessId', async (req, res) => {
 
 router.get('/widget.min.js', serveWidget);
 router.get('/widget.js', serveWidget);
+router.get('/api/widget/status', widgetStatus);
 
 module.exports = router;

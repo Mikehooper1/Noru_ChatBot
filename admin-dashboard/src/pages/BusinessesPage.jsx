@@ -126,7 +126,7 @@ export default function BusinessesPage() {
       await Promise.all([
         ...channelWrites,
         setDoc(doc(db, 'businesses', businessId, 'aiConfig', 'default'), {
-          model: 'gpt-4o-mini',
+          model: 'gemini-2.0-flash',
           systemPrompt: `You are a helpful assistant for ${name}.`,
           temperature: 0.7,
           maxTokens: 1024,

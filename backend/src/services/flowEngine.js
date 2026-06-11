@@ -1,5 +1,5 @@
 const { getDb, getFieldValue, getBusiness, getBusinessAIConfig } = require('../firebase/admin');
-const { getAIResponse, shouldHandoff } = require('./openaiService');
+const { getAIResponse, shouldHandoff } = require('./ai/aiService');
 const SessionManager = require('./sessionManager');
 const { sanitizeInput } = require('../utils/sanitize');
 const { trackEvent } = require('./analyticsService');
@@ -329,6 +329,34 @@ class FlowEngine {
   }
 
   async processMessage(userMessage) {
+    try {
+      return await this._processMessage(userMessage);
+    } catch (error) {
+      console.error('[FlowEngine] processMessage failed:', error.message);
+      // Never surface an error to the customer — try AI, then a safe fallback.
+      try {
+        const conv = await this.loadConversation();
+        const aiConfig = await getBusinessAIConfig(this.businessId);
+        if (aiConfig.enableAI !== false) {
+          return await this.getAIReply(sanitizeInput(userMessage), conv || {});
+        }
+        return {
+          reply: aiConfig.fallbackMessage || 'Thanks for your message! Our team will get back to you shortly.',
+          quickReplies: [],
+          action: 'error_fallback',
+        };
+      } catch (innerError) {
+        console.error('[FlowEngine] fallback also failed:', innerError.message);
+        return {
+          reply: 'Thanks for your message! Our team will get back to you shortly.',
+          quickReplies: [],
+          action: 'error_fallback',
+        };
+      }
+    }
+  }
+
+  async _processMessage(userMessage) {
     const sanitized = sanitizeInput(userMessage);
     const conv = await this.loadConversation();
     const aiConfig = await getBusinessAIConfig(this.businessId);
@@ -364,8 +392,10 @@ class FlowEngine {
       matchedFlow = flows.find((f) => textsMatch(sanitized, f.name) || textsMatch(sanitized, f.trigger));
     }
 
-    // Auto-start default flow on first user message
-    if (!matchedFlow && flows.length > 0) {
+    // Auto-start default flow on first user message ONLY when AI is off.
+    // With AI on, let the agent answer real questions instead of forcing
+    // every first message into the default booking flow.
+    if (!matchedFlow && flows.length > 0 && aiConfig.enableAI === false) {
       const history = await SessionManager.getConversationHistory(this.conversationId, 5);
       const userMessages = history.filter((m) => m.role === 'user');
       if (userMessages.length <= 1) {
