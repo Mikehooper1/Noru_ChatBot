@@ -183,7 +183,45 @@ async function handleWidgetMessage({ businessId, sessionId, message, userName, u
     userData: { name: userName || 'Visitor', phone: userPhone || '' },
   });
 
-  return { ...result, sessionId: userId };
+  return { ...result, sessionId: userId, conversationId: result.conversationId };
+}
+
+async function getWidgetAgentMessages({ businessId, sessionId, conversationId, after }) {
+  const { getDb } = require('../firebase/admin');
+  if (!businessId || (!sessionId && !conversationId)) return { messages: [] };
+
+  let convId = conversationId;
+
+  if (!convId && sessionId) {
+    const convSnap = await getDb()
+      .collection('conversations')
+      .where('businessId', '==', businessId)
+      .where('channel', '==', 'website')
+      .where('userId', '==', sessionId)
+      .limit(1)
+      .get();
+    if (convSnap.empty) return { messages: [] };
+    convId = convSnap.docs[0].id;
+  }
+
+  const afterMs = after ? parseInt(after, 10) : 0;
+  const msgSnap = await getDb()
+    .collection('conversations')
+    .doc(convId)
+    .collection('messages')
+    .orderBy('timestamp', 'asc')
+    .get();
+
+  const messages = msgSnap.docs
+    .map((d) => {
+      const data = d.data();
+      const ts = data.timestamp?.toDate?.()?.getTime()
+        || (data.timestamp?.seconds ? data.timestamp.seconds * 1000 : 0);
+      return { id: d.id, role: data.role, content: data.content, timestamp: ts };
+    })
+    .filter((m) => m.role === 'agent' && m.timestamp > afterMs);
+
+  return { messages, conversationId: convId };
 }
 
 module.exports = {
@@ -191,4 +229,5 @@ module.exports = {
   handleWhatsAppWebhook,
   handleTelegramUpdate,
   handleWidgetMessage,
+  getWidgetAgentMessages,
 };

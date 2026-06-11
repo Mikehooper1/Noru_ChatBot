@@ -30,8 +30,10 @@ async function deliverAgentReply(conversation, text) {
       return { delivered: true };
     }
 
-    // Website widget has no push channel yet — message is visible in inbox only.
-    return { delivered: false, error: null, note: 'Saved to inbox (website has no live push yet)' };
+    // Website — saved to Firestore; open widget polls /api/widget/messages for agent replies.
+    if (channel === 'website') {
+      return { delivered: true };
+    }
   } catch (error) {
     console.warn(`[Agent] Failed to deliver ${channel} reply: ${error.message}`);
     await logError(error, businessId).catch(() => {});

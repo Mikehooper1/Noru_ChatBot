@@ -270,8 +270,48 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
             )}
             {channel === 'telegram' && (
               <>
-                <Input label="Bot Token" type="password" value={form.botToken || ''} onChange={(e) => setForm({ ...form, botToken: e.target.value })} placeholder="Leave blank to keep existing token" />
-                <Input label="Bot Username" value={form.botUsername || ''} onChange={(e) => setForm({ ...form, botUsername: e.target.value })} />
+                <Input label="Bot Token" type="password" value={form.botToken || ''} onChange={(e) => setForm({ ...form, botToken: e.target.value })} placeholder="From @BotFather — leave blank to keep existing" />
+                <Input label="Bot Username" value={form.botUsername || ''} onChange={(e) => setForm({ ...form, botUsername: e.target.value })} placeholder="e.g. MyClinicBot" />
+                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
+                  <p className="font-semibold">Telegram webhook URL</p>
+                  <code className="block break-all bg-white px-2 py-1 rounded border">
+                    {`${BACKEND_URL}/webhook/telegram/${businessId}`}
+                  </code>
+                  <p>
+                    1. Save your <strong>Bot Token</strong> above, then click <strong>Register webhook</strong> below.
+                  </p>
+                  <p>
+                    Or set manually: open{' '}
+                    <code>{`https://api.telegram.org/bot<TOKEN>/setWebhook?url=${BACKEND_URL}/webhook/telegram/${businessId}`}</code>
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    setTesting(true);
+                    setTestMessage('');
+                    setError('');
+                    try {
+                      if (form.botToken?.trim()) {
+                        await persistConfig({ botToken: form.botToken, botUsername: form.botUsername });
+                      }
+                      const result = await api.registerTelegramWebhook(businessId);
+                      setTestMessage(result.message || 'Webhook registered');
+                    } catch (err) {
+                      setError(err.message);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  disabled={testing || saving}
+                >
+                  {testing ? 'Registering...' : 'Register webhook with Telegram'}
+                </Button>
+                {testMessage && channel === 'telegram' && (
+                  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                    {testMessage}
+                  </p>
+                )}
               </>
             )}
             {channel === 'website' && (

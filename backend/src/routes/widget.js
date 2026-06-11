@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { handleWidgetMessage } = require('../controllers/messageController');
+const { handleWidgetMessage, getWidgetAgentMessages } = require('../controllers/messageController');
 const { getBusiness, getDb } = require('../firebase/admin');
 const { apiLimiter } = require('../middleware/rateLimiter');
 
@@ -61,6 +61,25 @@ async function getWebsiteChannel(businessId) {
     .get();
   return doc.exists ? doc.data() : null;
 }
+
+router.get('/api/widget/messages', apiLimiter, async (req, res) => {
+  try {
+    const { businessId, sessionId, conversationId, after } = req.query;
+    if (!businessId || (!sessionId && !conversationId)) {
+      return res.status(400).json({ error: 'businessId and sessionId (or conversationId) are required' });
+    }
+
+    const business = await getBusiness(businessId);
+    if (!business || !business.isActive) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const result = await getWidgetAgentMessages({ businessId, sessionId, conversationId, after });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.post('/api/widget/message', apiLimiter, async (req, res) => {
   try {

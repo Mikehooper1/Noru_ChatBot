@@ -136,12 +136,26 @@ Quick reference:
 
 ## Telegram Webhook
 
-1. Create a bot via [@BotFather](https://t.me/BotFather)
-2. Configure bot token in Admin → Channels → Telegram
-3. Set webhook URL:
+1. Create a bot via [@BotFather](https://t.me/BotFather) and copy the **bot token**
+2. In **Admin → Channels → Telegram → Configure**:
+   - Paste **Bot Token** and **Bot Username**
+   - Click **Save**
+   - Click **Register webhook with Telegram**
+3. Webhook URL (one per chatbot):
+
    ```
-   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-backend-url/webhook/telegram/<BUSINESS_ID>
+   https://YOUR-RAILWAY-BACKEND-URL/webhook/telegram/YOUR_BUSINESS_ID
    ```
+
+   The URL is shown inside the Telegram configure modal. Your backend must have `BACKEND_URL` set to the same public URL (e.g. `https://noruchatbot-production.up.railway.app`).
+
+4. **Manual setup** (alternative): open in browser (replace `<TOKEN>` and `<BUSINESS_ID>`):
+
+   ```
+   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://YOUR-BACKEND-URL/webhook/telegram/<BUSINESS_ID>
+   ```
+
+5. Toggle **Telegram ON** in Channels after saving
 
 ## Website Widget Embed
 

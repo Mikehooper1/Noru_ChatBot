@@ -194,7 +194,8 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
 
         {form.modelTier === 'free' && (
           <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-            Free tier uses <strong>Gemini 2.5 Flash</strong> only. Get a key at{' '}
+            Free tier uses <strong>Gemini 2.5 Flash</strong> (Google shut down Gemini 2.0 / 1.5 in 2026 — those
+            models return 404). Get a key at{' '}
             <a href="https://aistudio.google.com/apikey" className="underline" target="_blank" rel="noreferrer">
               aistudio.google.com/apikey
             </a>{' '}

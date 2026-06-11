@@ -30,6 +30,8 @@ const WIDGET_CSS = `
 .widget-msg{max-width:80%;padding:10px 14px;border-radius:12px;word-wrap:break-word;animation:widget-fadeIn .3s ease}
 @keyframes widget-fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .widget-msg-bot{background:white;border:1px solid #e5e7eb;align-self:flex-start;border-bottom-left-radius:4px}
+.widget-msg-agent{background:#fff7ed;border:1px solid #fed7aa;align-self:flex-start;border-bottom-left-radius:4px}
+.widget-msg-agent::before{content:'Agent · ';font-size:11px;color:#c2410c;font-weight:600}
 .widget-msg-user{background:var(--widget-primary,#4F46E5);color:white;align-self:flex-end;border-bottom-right-radius:4px}
 .widget-typing{display:flex;gap:4px;padding:10px 14px;background:white;border:1px solid #e5e7eb;border-radius:12px;align-self:flex-start;width:fit-content}
 .widget-typing span{width:8px;height:8px;border-radius:50%;background:#9ca3af;animation:widget-bounce 1.4s infinite ease-in-out both}
@@ -61,6 +63,7 @@ function initWidget() {
   const businessId = config.businessId;
   const backendUrl = normalizeBackendUrl(config.backendUrl);
   const storageKey = `noru_chat_${businessId}`;
+  const convStorageKey = `noru_conv_${businessId}`;
   const userStorageKey = `noru_user_${businessId}`;
 
   if (!businessId) {
@@ -73,6 +76,7 @@ function initWidget() {
   }
 
   let sessionId = localStorage.getItem(storageKey);
+  let conversationId = localStorage.getItem(convStorageKey);
 
   // Load saved user info
   let savedUser = null;
@@ -94,6 +98,44 @@ function initWidget() {
   let chatUI;
   let userName = savedUser?.name || '';
   let userPhone = savedUser?.phone || '';
+  let pollTimer = null;
+  let lastPollAt = Date.now();
+  const seenMessageIds = new Set();
+
+  async function pollAgentMessages() {
+    if (!chatUI?.isOpen || !sessionId || !chatUI.introComplete) return;
+    try {
+      const params = new URLSearchParams({
+        businessId,
+        sessionId,
+        after: String(lastPollAt),
+      });
+      if (conversationId) params.set('conversationId', conversationId);
+      const res = await fetch(`${backendUrl}/api/widget/messages?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const msg of data.messages || []) {
+        if (!msg.content || seenMessageIds.has(msg.id)) continue;
+        seenMessageIds.add(msg.id);
+        chatUI.addMessage(msg.content, 'agent', msg.id);
+        lastPollAt = Math.max(lastPollAt, msg.timestamp || Date.now());
+      }
+    } catch {
+      // ignore transient poll errors
+    }
+  }
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(pollAgentMessages, 3000);
+  }
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
 
   async function loadConfig() {
     try {
@@ -134,6 +176,11 @@ function initWidget() {
         sessionId = data.sessionId;
         localStorage.setItem(storageKey, sessionId);
       }
+      if (data.conversationId) {
+        conversationId = data.conversationId;
+        localStorage.setItem(convStorageKey, conversationId);
+      }
+      lastPollAt = Date.now();
 
       if (data.upgradeUrl) {
         chatUI.showUpgradeBanner(data.upgradeUrl);
@@ -158,6 +205,16 @@ function initWidget() {
     chatUI = new ChatUI(shadow, { ...config, ...widgetConfig });
     chatUI.render();
     chatUI.onSend = sendMessage;
+    chatUI.onVisibilityChange = (open) => {
+      if (open) {
+        startPolling();
+        pollAgentMessages();
+      } else {
+        stopPolling();
+      }
+    };
+
+    startPolling();
 
     // If user already provided info previously, skip intro
     if (savedUser?.name && savedUser?.phone) {

@@ -28,6 +28,13 @@ export default function AppointmentsPage() {
     await api.updateAppointment(id, { status });
   };
 
+  const handleDelete = async (appt) => {
+    if (!window.confirm(`Delete appointment for ${appt.userName || 'Guest'} on ${appt.date} at ${appt.time}?`)) {
+      return;
+    }
+    await api.deleteAppointment(appt.id);
+  };
+
   const exportCSV = () => {
     const headers = ['Service', 'User', 'Phone', 'Date', 'Time', 'Status', 'Channel'];
     const rows = appointments.map((a) => [a.serviceName, a.userName, a.userPhone, a.date, a.time, a.status, a.channel]);
@@ -109,11 +116,16 @@ export default function AppointmentsPage() {
                     }`}>{appt.status}</span>
                   </td>
                   <td className="px-4 py-3">
-                    {appt.status !== 'cancelled' && (
-                      <Button variant="ghost" onClick={() => handleStatusChange(appt.id, 'cancelled')}>
-                        Cancel
+                    <div className="flex gap-1">
+                      {appt.status !== 'cancelled' && (
+                        <Button variant="ghost" onClick={() => handleStatusChange(appt.id, 'cancelled')}>
+                          Cancel
+                        </Button>
+                      )}
+                      <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(appt)}>
+                        Delete
                       </Button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}

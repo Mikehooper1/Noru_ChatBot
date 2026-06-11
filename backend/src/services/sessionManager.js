@@ -125,6 +125,21 @@ class SessionManager {
       currentStepId: null,
     });
   }
+
+  static async deleteConversation(conversationId) {
+    const db = getDb();
+    const convRef = db.collection('conversations').doc(conversationId);
+
+    while (true) {
+      const snap = await convRef.collection('messages').limit(400).get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    await convRef.delete();
+  }
 }
 
 module.exports = SessionManager;

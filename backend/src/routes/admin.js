@@ -5,6 +5,7 @@ const {
   getWhatsAppConfig,
   updateWhatsAppConfig,
   testWhatsAppConfig,
+  registerTelegramWebhook,
 } = require('../controllers/channelConfigController');
 const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
 const SessionManager = require('../services/sessionManager');
@@ -22,6 +23,21 @@ router.put('/api/ai-config', verifyFirebaseToken, updateAIConfig);
 router.get('/api/channels/whatsapp', verifyFirebaseToken, getWhatsAppConfig);
 router.put('/api/channels/whatsapp', verifyFirebaseToken, updateWhatsAppConfig);
 router.post('/api/channels/whatsapp/test', verifyFirebaseToken, testWhatsAppConfig);
+router.post('/api/channels/telegram/register-webhook', verifyFirebaseToken, registerTelegramWebhook);
+
+router.delete('/api/conversations/:id', verifyFirebaseToken, async (req, res) => {
+  try {
+    const conversationId = req.params.id;
+    const convDoc = await getDb().collection('conversations').doc(conversationId).get();
+    if (!convDoc.exists) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    await SessionManager.deleteConversation(conversationId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.get('/api/conversations', verifyFirebaseToken, async (req, res) => {
   try {

@@ -58,6 +58,8 @@ export const api = {
     request('/api/appointments', { method: 'POST', body: JSON.stringify(data) }),
   updateAppointment: (id, data) =>
     request(`/api/appointments/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteAppointment: (id) =>
+    request(`/api/appointments/${id}`, { method: 'DELETE' }),
   getBroadcasts: (businessId) =>
     request(`/api/broadcasts?businessId=${businessId}`),
   createBroadcast: (data) =>
@@ -76,6 +78,8 @@ export const api = {
     request(`/api/conversations/${id}/reply`, { method: 'POST', body: JSON.stringify({ message }) }),
   resolveConversation: (id) =>
     request(`/api/conversations/${id}/resolve`, { method: 'POST' }),
+  deleteConversation: (id) =>
+    request(`/api/conversations/${id}`, { method: 'DELETE' }),
   getPlans: () => fetch(`${BASE_URL}/api/plans`).then(parseJsonSafe),
   createPaymentOrder: (businessId, planId) =>
     request('/api/payments/create-order', {
@@ -94,6 +98,8 @@ export const api = {
     request('/api/channels/whatsapp', { method: 'PUT', body: JSON.stringify(data) }),
   testWhatsAppConfig: (businessId) =>
     request('/api/channels/whatsapp/test', { method: 'POST', body: JSON.stringify({ businessId }) }),
+  registerTelegramWebhook: (businessId) =>
+    request('/api/channels/telegram/register-webhook', { method: 'POST', body: JSON.stringify({ businessId }) }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',

@@ -103,4 +103,24 @@ async function updateAppointment(req, res) {
   }
 }
 
-module.exports = { createAppointment, getAppointments, updateAppointment };
+async function deleteAppointment(req, res) {
+  try {
+    const { id } = req.params;
+    const doc = await getDb().collection('appointments').doc(id).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const data = doc.data();
+    if (data.googleCalendarEventId) {
+      await deleteCalendarEvent(data.googleCalendarEventId);
+    }
+
+    await doc.ref.delete();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+module.exports = { createAppointment, getAppointments, updateAppointment, deleteAppointment };

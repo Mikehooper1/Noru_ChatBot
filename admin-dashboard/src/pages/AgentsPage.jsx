@@ -24,10 +24,11 @@ function ActivityBadge({ conversation, now }) {
   );
 }
 
-function ConversationPanel({ conversation, onClose, now }) {
+function ConversationPanel({ conversation, onClose, now, onDeleted }) {
   const [messages, setMessages] = useState([]);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -65,6 +66,23 @@ function ConversationPanel({ conversation, onClose, now }) {
     onClose();
   };
 
+  const handleDelete = async () => {
+    const label = conversation.userName || conversation.userId || 'this chat';
+    if (!window.confirm(`Delete conversation with ${label}? All messages will be removed.`)) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await api.deleteConversation(conversation.id);
+      onDeleted?.();
+      onClose();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full border-l border-gray-200 bg-white">
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
@@ -81,6 +99,9 @@ function ConversationPanel({ conversation, onClose, now }) {
           {conversation.status === 'handoff' && (
             <Button variant="secondary" onClick={resolve}>Resolve</Button>
           )}
+          <Button variant="ghost" className="text-red-600" onClick={handleDelete} disabled={deleting}>
+            {deleting ? '...' : 'Delete'}
+          </Button>
           <Button variant="ghost" onClick={onClose}>✕</Button>
         </div>
       </div>
@@ -168,34 +189,62 @@ export default function AgentsPage() {
             <p className="p-4 text-gray-500 text-sm">No conversations in this view.</p>
           ) : (
             conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => setSelected(conv)}
-                className={`w-full text-left p-4 border-b border-gray-100 hover:bg-gray-50 ${
+                className={`flex border-b border-gray-100 hover:bg-gray-50 ${
                   selected?.id === conv.id ? 'bg-primary/5' : ''
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium text-sm truncate">{conv.userName || conv.userId || 'Visitor'}</p>
-                  <ActivityBadge conversation={conv} now={now} />
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-gray-500 capitalize">{conv.channel}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
-                    conv.status === 'handoff' ? 'bg-orange-100 text-orange-800' :
-                    conv.status === 'resolved' ? 'bg-gray-100 text-gray-600' :
-                    'bg-blue-50 text-blue-700'
-                  }`}>{conv.status}</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">{formatLastSeen(conv, now)}</p>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setSelected(conv)}
+                  className="flex-1 text-left p-4 min-w-0"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-sm truncate">{conv.userName || conv.userId || 'Visitor'}</p>
+                    <ActivityBadge conversation={conv} now={now} />
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-gray-500 capitalize">{conv.channel}</p>
+                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
+                      conv.status === 'handoff' ? 'bg-orange-100 text-orange-800' :
+                      conv.status === 'resolved' ? 'bg-gray-100 text-gray-600' :
+                      'bg-blue-50 text-blue-700'
+                    }`}>{conv.status}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{formatLastSeen(conv, now)}</p>
+                </button>
+                <button
+                  type="button"
+                  title="Delete conversation"
+                  className="px-3 text-red-500 hover:bg-red-50 text-sm shrink-0"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const label = conv.userName || conv.userId || 'this chat';
+                    if (!window.confirm(`Delete conversation with ${label}?`)) return;
+                    try {
+                      await api.deleteConversation(conv.id);
+                      if (selected?.id === conv.id) setSelected(null);
+                    } catch (err) {
+                      alert(err.message);
+                    }
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             ))
           )}
         </div>
 
         {selected && (
           <div className="flex-1 min-w-0">
-            <ConversationPanel conversation={selected} onClose={() => setSelected(null)} now={now} />
+            <ConversationPanel
+              conversation={selected}
+              onClose={() => setSelected(null)}
+              onDeleted={() => setSelected(null)}
+              now={now}
+            />
           </div>
         )}
       </div>

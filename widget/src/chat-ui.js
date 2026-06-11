@@ -5,6 +5,8 @@ export class ChatUI {
     this.isOpen = false;
     this.onSend = null;
     this.onIntroComplete = null;
+    this.onVisibilityChange = null;
+    this.seenMessageIds = new Set();
     this.typingEl = null;
     this.introComplete = false;
     this.userName = '';
@@ -96,6 +98,10 @@ export class ChatUI {
     this.window.style.display = this.isOpen ? 'flex' : 'none';
     this.btn.style.display = this.isOpen ? 'none' : 'flex';
 
+    if (this.onVisibilityChange) {
+      this.onVisibilityChange(this.isOpen);
+    }
+
     if (this.isOpen) {
       if (this.introComplete) {
         this.input.focus();
@@ -183,7 +189,11 @@ export class ChatUI {
     this.onSend(text);
   }
 
-  addMessage(text, role) {
+  addMessage(text, role, messageId) {
+    if (messageId) {
+      if (this.seenMessageIds.has(messageId)) return;
+      this.seenMessageIds.add(messageId);
+    }
     const msg = document.createElement('div');
     msg.className = `widget-msg widget-msg-${role}`;
     msg.textContent = text;
