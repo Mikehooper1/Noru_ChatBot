@@ -84,6 +84,10 @@ export const api = {
     }),
   verifyPayment: (data) =>
     request('/api/payments/verify', { method: 'POST', body: JSON.stringify(data) }),
+  getAIConfig: (businessId) =>
+    request(`/api/ai-config?businessId=${encodeURIComponent(businessId)}`),
+  saveAIConfig: (data) =>
+    request('/api/ai-config', { method: 'PUT', body: JSON.stringify(data) }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',

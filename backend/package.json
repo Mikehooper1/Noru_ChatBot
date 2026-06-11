@@ -8,13 +8,14 @@
     "prestart": "node scripts/copy-widget.js",
     "start": "node src/app.js",
     "seed": "node scripts/seed.js",
-    "copy-widget": "node scripts/copy-widget.js"
+    "copy-widget": "node scripts/copy-widget.js",
+    "test:firebase": "node scripts/test-firebase-key.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
+    "@google/generative-ai": "^0.24.1",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -1,6 +1,7 @@
 const express = require('express');
 const { verifyFirebaseToken } = require('../middleware/auth');
 const { getDailyAnalytics, getAnalyticsRange } = require('../controllers/analyticsController');
+const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
 const SessionManager = require('../services/sessionManager');
 const { getDb } = require('../firebase/admin');
 const { sanitizeInput } = require('../utils/sanitize');
@@ -9,6 +10,8 @@ const router = express.Router();
 
 router.get('/api/analytics/daily', verifyFirebaseToken, getDailyAnalytics);
 router.get('/api/analytics/range', verifyFirebaseToken, getAnalyticsRange);
+router.get('/api/ai-config', verifyFirebaseToken, getAIConfig);
+router.put('/api/ai-config', verifyFirebaseToken, updateAIConfig);
 
 router.get('/api/conversations', verifyFirebaseToken, async (req, res) => {
   try {

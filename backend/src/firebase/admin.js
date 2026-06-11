@@ -1,7 +1,72 @@
 const admin = require('firebase-admin');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 let db = null;
+
+// Firebase private keys in .env often break on Windows/Railway due to quoting
+// and newline encoding. This normalizes every common format.
+function normalizePrivateKey(raw) {
+  if (!raw) return raw;
+
+  let key = String(raw).trim();
+
+  // Strip one layer of surrounding quotes (dotenv + manual paste)
+  while (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1).trim();
+  }
+
+  // Literal \n from .env → real newlines
+  key = key.replace(/\\n/g, '\n');
+
+  // Windows CRLF inside the key body
+  key = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Sometimes pasted as one long line without breaks
+  if (!key.includes('\n') && key.includes('-----BEGIN')) {
+    key = key
+      .replace(/-----BEGIN PRIVATE KEY-----/g, '-----BEGIN PRIVATE KEY-----\n')
+      .replace(/-----END PRIVATE KEY-----/g, '\n-----END PRIVATE KEY-----\n')
+      .replace(/-----BEGIN RSA PRIVATE KEY-----/g, '-----BEGIN RSA PRIVATE KEY-----\n')
+      .replace(/-----END RSA PRIVATE KEY-----/g, '\n-----END RSA PRIVATE KEY-----\n');
+  }
+
+  return key.trim();
+}
+
+function loadServiceAccount() {
+  // Option 1: path to downloaded serviceAccount.json
+  const jsonPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (jsonPath && fs.existsSync(jsonPath)) {
+    const parsed = JSON.parse(fs.readFileSync(path.resolve(jsonPath), 'utf8'));
+    return {
+      projectId: parsed.project_id,
+      clientEmail: parsed.client_email,
+      privateKey: normalizePrivateKey(parsed.private_key),
+    };
+  }
+
+  // Option 2: entire JSON pasted as one env var (works well on Railway)
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    return {
+      projectId: parsed.project_id,
+      clientEmail: parsed.client_email,
+      privateKey: normalizePrivateKey(parsed.private_key),
+    };
+  }
+
+  // Option 3: separate env vars in .env
+  return {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY),
+  };
+}
 
 function initFirebase() {
   if (admin.apps.length) {
@@ -9,16 +74,36 @@ function initFirebase() {
     return db;
   }
 
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const { projectId, clientEmail, privateKey } = loadServiceAccount();
 
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      privateKey,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    }),
-    storageBucket: `${process.env.FIREBASE_PROJECT_ID}.appspot.com`,
-  });
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      'Firebase Admin credentials missing. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY in backend/.env'
+    );
+  }
+
+  if (!privateKey.includes('BEGIN PRIVATE KEY') && !privateKey.includes('BEGIN RSA PRIVATE KEY')) {
+    throw new Error(
+      'FIREBASE_PRIVATE_KEY does not look like a PEM key. Download a new service account JSON from Firebase Console → Project Settings → Service Accounts.'
+    );
+  }
+
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`,
+    });
+  } catch (error) {
+    const hint =
+      'Fix FIREBASE_PRIVATE_KEY: paste the "private_key" value from your Firebase service account JSON. ' +
+      'In .env use one line with \\n for line breaks, e.g. FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nMIIE...\\n-----END PRIVATE KEY-----\\n" ' +
+      'Or set GOOGLE_APPLICATION_CREDENTIALS=./path/to/serviceAccount.json';
+    throw new Error(`${error.message}. ${hint}`);
+  }
 
   db = admin.firestore();
   return db;

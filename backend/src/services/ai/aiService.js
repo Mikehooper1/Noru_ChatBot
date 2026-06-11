@@ -1,17 +1,14 @@
 const { getBusinessAIConfig, logError } = require('../../firebase/admin');
 const { buildSystemPrompt, shouldHandoff } = require('./buildSystemPrompt');
 const geminiProvider = require('./geminiProvider');
+const { resolveGeminiApiKeys } = require('../aiConfigService');
 
-// Startup diagnostics — make misconfiguration obvious in the logs.
 (function logProviderStatus() {
-  if (geminiProvider.isConfigured()) {
-    console.log(`[AI] Gemini configured with ${geminiProvider.apiKeys.length} API key(s)`);
-    const invalid = geminiProvider.apiKeys.filter((k) => !k.startsWith('AIza'));
-    if (invalid.length) {
-      console.warn(`[AI] ⚠ ${invalid.length} Gemini key(s) look invalid — keys usually start with "AIza"`);
-    }
+  const envKeys = resolveGeminiApiKeys({});
+  if (envKeys.length) {
+    console.log(`[AI] ${envKeys.length} Gemini key(s) available from backend .env (fallback)`);
   } else {
-    console.error('[AI] ❌ No Gemini API key set. Add GEMINI_API_KEY (or GEMINI_API_KEYS) to backend/.env');
+    console.log('[AI] No Gemini keys in .env — businesses can set keys in Admin → AI Settings');
   }
 })();
 
@@ -27,14 +24,18 @@ function formatMessages(conversationHistory, userMessage) {
 
 async function getAIResponse(businessId, conversationHistory, userMessage, sessionData) {
   const aiConfig = await getBusinessAIConfig(businessId);
+  aiConfig._businessId = businessId;
 
   if (aiConfig.enableAI === false) {
     return aiConfig.fallbackMessage || 'How can I help you today?';
   }
 
-  if (!geminiProvider.isConfigured()) {
-    console.error('[AI] Cannot answer — Gemini is not configured.');
-    return aiConfig.fallbackMessage || 'Thanks for your message! Our team will get back to you shortly.';
+  if (!geminiProvider.isConfigured(aiConfig)) {
+    console.error(`[AI] Cannot answer for business ${businessId} — no Gemini API keys (set in Admin → AI Settings)`);
+    return (
+      aiConfig.fallbackMessage ||
+      'Thanks for your message! Please add your Gemini API key in Admin → AI Settings to enable AI replies.'
+    );
   }
 
   const systemPrompt = buildSystemPrompt(aiConfig, sessionData);
@@ -42,6 +43,7 @@ async function getAIResponse(businessId, conversationHistory, userMessage, sessi
 
   try {
     const result = await geminiProvider.complete({
+      aiConfig,
       systemPrompt,
       messages,
       preferredModel: aiConfig.model,
