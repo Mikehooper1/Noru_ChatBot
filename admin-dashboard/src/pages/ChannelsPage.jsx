@@ -31,7 +31,7 @@ export default function ChannelsPage() {
       <div className="space-y-4">
         {channels.map((ch) => (
           <ChannelToggle
-            key={ch.id}
+            key={`${currentBusiness?.id}-${ch.id}`}
             businessId={currentBusiness?.id}
             channel={ch.id}
             config={configs[ch.id]}

@@ -31,10 +31,20 @@ const WIDGET_CSS = `
 @media(max-width:480px){.widget-window{width:calc(100vw - 16px);height:calc(100vh - 80px);bottom:8px!important;right:8px!important;left:8px!important}}
 `;
 
-(function () {
+function normalizeBackendUrl(url) {
+  if (!url) return 'http://localhost:3000';
+  const trimmed = String(url).trim().replace(/\/$/, '');
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function getMountTarget() {
+  return document.body || document.documentElement;
+}
+
+function initWidget() {
   const config = window.BotConfig || {};
   const businessId = config.businessId;
-  const backendUrl = config.backendUrl || 'http://localhost:3000';
+  const backendUrl = normalizeBackendUrl(config.backendUrl);
   const storageKey = `noru_chat_${businessId}`;
 
   if (!businessId) {
@@ -42,11 +52,15 @@ const WIDGET_CSS = `
     return;
   }
 
+  if (document.getElementById('noru-chatbot-widget')) {
+    return;
+  }
+
   let sessionId = localStorage.getItem(storageKey);
 
   const host = document.createElement('div');
   host.id = 'noru-chatbot-widget';
-  document.body.appendChild(host);
+  getMountTarget().appendChild(host);
 
   const shadow = host.attachShadow({ mode: 'open' });
 
@@ -54,10 +68,15 @@ const WIDGET_CSS = `
   style.textContent = WIDGET_CSS;
   shadow.appendChild(style);
 
+  let chatUI;
+
   async function loadConfig() {
     try {
       const res = await fetch(`${backendUrl}/api/widget/config/${businessId}`);
       if (res.ok) return res.json();
+      if (res.status === 403) {
+        console.warn('[Noru ChatBot] Website channel is disabled for this business');
+      }
     } catch (e) {
       console.warn('[Noru ChatBot] Could not load config, using defaults');
     }
@@ -70,6 +89,7 @@ const WIDGET_CSS = `
   }
 
   async function sendMessage(message) {
+    if (!chatUI) return;
     chatUI.showTyping();
     try {
       const res = await fetch(`${backendUrl}/api/widget/message`, {
@@ -79,6 +99,11 @@ const WIDGET_CSS = `
       });
       const data = await res.json();
       chatUI.hideTyping();
+
+      if (!res.ok) {
+        chatUI.addMessage(data.error || 'Sorry, something went wrong. Please try again.', 'bot');
+        return;
+      }
 
       if (data.sessionId) {
         sessionId = data.sessionId;
@@ -95,13 +120,21 @@ const WIDGET_CSS = `
     }
   }
 
-  let chatUI;
-
   loadConfig().then((widgetConfig) => {
+    if (widgetConfig.enabled === false) {
+      host.remove();
+      return;
+    }
+
     chatUI = new ChatUI(shadow, { ...config, ...widgetConfig });
     chatUI.render();
     chatUI.onSend = sendMessage;
     chatUI.showWelcome(widgetConfig.welcomeMessage);
   });
-})();
+}
 
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initWidget);
+} else {
+  initWidget();
+}
