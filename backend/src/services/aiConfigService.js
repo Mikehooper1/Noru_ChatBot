@@ -59,7 +59,8 @@ async function saveAIConfig(businessId, body) {
 
   const existing = (await ref.get()).data() || {};
   const payload = {
-    model: body.model || 'gemini-2.0-flash',
+    modelTier: body.modelTier === 'pro' ? 'pro' : 'free',
+    model: body.model || (body.modelTier === 'pro' ? 'gemini-2.0-flash' : 'gemini-2.0-flash-lite'),
     systemPrompt: body.systemPrompt || '',
     temperature: body.temperature ?? 0.7,
     maxTokens: body.maxTokens || 1024,

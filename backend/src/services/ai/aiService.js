@@ -61,7 +61,8 @@ async function getAIResponse(businessId, conversationHistory, userMessage, sessi
       new Error(`Gemini failed for business ${businessId}: ${error.message}`),
       businessId
     ).catch(() => {});
-    return aiConfig.fallbackMessage || 'Thanks for your message! Let me connect you with our team to help you further.';
+    return aiConfig.fallbackMessage ||
+      'Thanks for your message! Our AI is briefly at capacity — please try again in a minute.';
   }
 }
 

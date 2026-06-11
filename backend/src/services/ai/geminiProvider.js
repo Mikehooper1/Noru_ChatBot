@@ -76,7 +76,7 @@ async function complete({
     );
   }
 
-  const modelChain = buildModelChain(preferredModel);
+  const modelChain = buildModelChain(preferredModel, aiConfig?.modelTier || 'free');
   const scope = aiConfig?.geminiApiKeysEncrypted?.length ? `biz-${aiConfig._businessId || 'x'}` : 'env';
   const keyOrder = orderedKeysForRequest(apiKeys, scope);
   const history = toGeminiHistory(messages);

@@ -179,8 +179,13 @@ async function getBusinessAIConfig(businessId) {
     .collection('aiConfig')
     .doc('default')
     .get();
-  return doc.exists ? doc.data() : {
-    model: 'gemini-2.0-flash',
+  if (doc.exists) {
+    const data = doc.data();
+    return { ...data, modelTier: data.modelTier || 'free' };
+  }
+  return {
+    modelTier: 'free',
+    model: 'gemini-2.0-flash-lite',
     systemPrompt: 'You are a helpful business assistant.',
     temperature: 0.7,
     maxTokens: 1024,

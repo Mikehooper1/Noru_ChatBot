@@ -7,7 +7,8 @@ import { api } from '../../services/api';
 
 export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
   const [form, setForm] = useState({
-    model: aiConfig?.model || 'gemini-2.0-flash',
+    modelTier: aiConfig?.modelTier || 'free',
+    model: aiConfig?.model || 'gemini-2.0-flash-lite',
     systemPrompt: aiConfig?.systemPrompt || '',
     temperature: aiConfig?.temperature ?? 0.7,
     maxTokens: aiConfig?.maxTokens || 1024,
@@ -33,7 +34,8 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
     setKeyCount(aiConfig?.geminiApiKeyCount || 0);
     setForm((prev) => ({
       ...prev,
-      model: aiConfig?.model || 'gemini-2.0-flash',
+      modelTier: aiConfig?.modelTier || 'free',
+      model: aiConfig?.model || 'gemini-2.0-flash-lite',
       systemPrompt: aiConfig?.systemPrompt || '',
       temperature: aiConfig?.temperature ?? 0.7,
       maxTokens: aiConfig?.maxTokens || 1024,
@@ -54,6 +56,7 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
     try {
       const updated = await api.saveAIConfig({
         businessId,
+        modelTier: form.modelTier,
         model: form.model,
         systemPrompt: form.systemPrompt,
         temperature: form.temperature,
@@ -158,17 +161,51 @@ export default function AISettingsForm({ businessId, aiConfig, onSaved }) {
         </div>
 
         <Select
-          label="Model (Gemini)"
-          value={form.model}
-          onChange={(e) => setForm({ ...form, model: e.target.value })}
+          label="Model tier"
+          value={form.modelTier}
+          onChange={(e) => {
+            const tier = e.target.value;
+            setForm({
+              ...form,
+              modelTier: tier,
+              model: tier === 'pro' ? 'gemini-2.0-flash' : 'gemini-2.0-flash-lite',
+            });
+          }}
           options={[
-            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (recommended)' },
-            { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (fastest)' },
-            { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-            { value: 'gemini-1.5-flash-8b', label: 'Gemini 1.5 Flash 8B' },
-            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (most capable)' },
+            { value: 'free', label: 'Free — uses free-tier quota only (recommended)' },
+            { value: 'pro', label: 'Pro — stronger models (uses paid/higher quota)' },
           ]}
         />
+
+        <Select
+          label={form.modelTier === 'pro' ? 'Pro model' : 'Free model'}
+          value={form.model}
+          onChange={(e) => setForm({ ...form, model: e.target.value })}
+          options={
+            form.modelTier === 'pro'
+              ? [
+                  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+                  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (most capable)' },
+                ]
+              : [
+                  { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (recommended)' },
+                  { value: 'gemini-1.5-flash-8b', label: 'Gemini 1.5 Flash 8B' },
+                  { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+                ]
+          }
+        />
+
+        {form.modelTier === 'free' && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+            Free tier active — the agent will <strong>not</strong> use Pro models, so you avoid quota-exhausted errors on paid models.
+          </p>
+        )}
+
+        {form.modelTier === 'pro' && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            Pro models use higher/paid quota. If exhausted, the agent falls back to free models automatically.
+          </p>
+        )}
 
         <Select
           label="Tone"
