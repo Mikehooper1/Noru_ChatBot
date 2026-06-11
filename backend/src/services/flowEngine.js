@@ -1,8 +1,27 @@
-const { getDb, getFieldValue } = require('../firebase/admin');
+const { getDb, getFieldValue, getBusiness, getBusinessAIConfig } = require('../firebase/admin');
 const { getAIResponse, shouldHandoff } = require('./openaiService');
-const { getBusinessAIConfig } = require('../firebase/admin');
 const SessionManager = require('./sessionManager');
 const { sanitizeInput } = require('../utils/sanitize');
+const { trackEvent } = require('./analyticsService');
+const { v4: uuidv4 } = require('uuid');
+
+const GREETING_PATTERN = /^(hi|hello|hey|hola|namaste|start|menu|help|good\s*(morning|afternoon|evening)|yo|sup)[!.?\s]*$/i;
+
+const TRIGGER_ALIASES = {
+  book: ['book', 'booking', 'appointment', 'appointments', 'schedule', 'reserve', 'visit'],
+  order: ['order', 'orders', 'track', 'tracking', 'shipping', 'delivery', 'return', 'package'],
+  help: ['help', 'support', 'assist', 'assistance', 'issue', 'problem'],
+};
+
+function normalizeText(text) {
+  return (text || '').toLowerCase().trim();
+}
+
+function textsMatch(a, b) {
+  const x = normalizeText(a);
+  const y = normalizeText(b);
+  return x === y || x.includes(y) || y.includes(x);
+}
 
 class FlowEngine {
   constructor(businessId, conversationId) {
@@ -17,23 +36,71 @@ class FlowEngine {
   }
 
   async loadFlows() {
-    const snap = await this.db
+    try {
+      const snap = await this.db
+        .collection('businesses')
+        .doc(this.businessId)
+        .collection('flows')
+        .where('isActive', '==', true)
+        .orderBy('order')
+        .get();
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    } catch (error) {
+      console.warn('[FlowEngine] orderBy query failed, loading without sort:', error.message);
+      const snap = await this.db
+        .collection('businesses')
+        .doc(this.businessId)
+        .collection('flows')
+        .where('isActive', '==', true)
+        .get();
+      return snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+  }
+
+  async getFlowById(flowId) {
+    const doc = await this.db
       .collection('businesses')
       .doc(this.businessId)
       .collection('flows')
-      .where('isActive', '==', true)
-      .orderBy('order')
+      .doc(flowId)
       .get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
   }
 
-  async matchFlow(message) {
-    const flows = await this.loadFlows();
-    const lower = message.toLowerCase().trim();
-    return flows.find((f) => {
-      const trigger = (f.trigger || '').toLowerCase();
-      return lower.includes(trigger) || lower === trigger;
-    });
+  matchFlow(message, flows) {
+    const lower = normalizeText(message);
+
+    for (const flow of flows) {
+      const trigger = normalizeText(flow.trigger);
+      if (!trigger) continue;
+
+      const aliases = TRIGGER_ALIASES[trigger] || [trigger];
+      if (aliases.some((alias) => lower.includes(alias) || lower === alias)) {
+        return flow;
+      }
+    }
+
+    if (GREETING_PATTERN.test(lower) && flows.length > 0) {
+      return flows[0];
+    }
+
+    return null;
+  }
+
+  buildFlowMenu(flows) {
+    const quickReplies = [];
+    for (const flow of flows) {
+      const label = flow.name || flow.trigger;
+      if (label && !quickReplies.includes(label)) {
+        quickReplies.push(label);
+      }
+      if (flow.trigger && !quickReplies.includes(flow.trigger)) {
+        quickReplies.push(flow.trigger);
+      }
+    }
+    return quickReplies.slice(0, 6);
   }
 
   async saveSession(data) {
@@ -43,57 +110,193 @@ class FlowEngine {
     return sessionData;
   }
 
+  repromptStep(step) {
+    return {
+      reply: step.message,
+      quickReplies: step.quickReplies || [],
+      action: null,
+    };
+  }
+
+  resolveNextStepId(currentStep, userInput) {
+    const input = normalizeText(userInput);
+
+    if (currentStep.conditions?.length) {
+      const condition = currentStep.conditions.find((c) => textsMatch(input, c.if));
+      if (condition) return condition.goto;
+      if (currentStep.quickReplies?.length) return null;
+    }
+
+    if (currentStep.quickReplies?.length) {
+      const matched = currentStep.quickReplies.find((q) => textsMatch(input, q));
+      if (!matched) return null;
+    }
+
+    return currentStep.nextStepId || null;
+  }
+
+  async handleBookingStep(step, conv) {
+    const session = conv.sessionData || {};
+    const serviceName = session.selection || session.service || session.lastChoice || 'General Consultation';
+    const date = session.date || session.text || '';
+    const time = session.time || session.text || '';
+
+    if (!date || !time) {
+      return {
+        reply: step.message || 'Let me confirm your booking details. What date and time work for you?',
+        quickReplies: [],
+        action: null,
+      };
+    }
+
+    // Re-read conversation from DB to get latest userName/userPhone
+    const freshConv = await this.loadConversation() || conv;
+
+    // Resolve user name: conversation field > session data > fallback
+    const userName = freshConv.userName || session.name || conv.userName || 'Guest';
+
+    // Resolve user phone: conversation field > session data > WhatsApp userId fallback
+    let userPhone = freshConv.userPhone || session.phone || conv.userPhone || '';
+    if (!userPhone && freshConv.channel === 'whatsapp') {
+      userPhone = freshConv.userId || '';
+    }
+
+    const appointmentId = uuidv4();
+    const appointment = {
+      businessId: this.businessId,
+      conversationId: this.conversationId,
+      serviceName,
+      userId: freshConv.userId,
+      userName,
+      userPhone,
+      userEmail: session.email || '',
+      date,
+      time: time.length === 5 ? time : time.substring(0, 5),
+      duration: 30,
+      status: 'confirmed',
+      channel: freshConv.channel || 'website',
+      notes: JSON.stringify(session),
+      reminderSent: false,
+      createdAt: getFieldValue().serverTimestamp(),
+      updatedAt: getFieldValue().serverTimestamp(),
+    };
+
+    await this.db.collection('appointments').doc(appointmentId).set(appointment);
+    await trackEvent(this.businessId, conv.channel || 'website', 'appointment');
+
+    await SessionManager.updateConversation(this.conversationId, {
+      currentFlowId: null,
+      currentStepId: null,
+    });
+
+    const summary = `✅ Booking confirmed!\n\nService: ${serviceName}\nDate: ${appointment.date}\nTime: ${appointment.time}\n\nWe look forward to seeing you!`;
+
+    return {
+      reply: step.message ? `${step.message}\n\n${summary}` : summary,
+      quickReplies: [],
+      action: 'booking_complete',
+    };
+  }
+
+  async renderStep(flow, step) {
+    if (step.type === 'booking') {
+      const conv = await this.loadConversation();
+      return this.handleBookingStep(step, conv);
+    }
+
+    if (step.type === 'handoff') {
+      await SessionManager.setHandoff(this.conversationId);
+      const aiConfig = await getBusinessAIConfig(this.businessId);
+      return {
+        reply: step.message || aiConfig.handoffMessage,
+        quickReplies: [],
+        action: 'handoff',
+      };
+    }
+
+    return {
+      reply: step.message,
+      quickReplies: step.quickReplies || [],
+      action: null,
+    };
+  }
+
+  async getAIReply(userMessage, conv) {
+    const history = await SessionManager.getConversationHistory(this.conversationId);
+    const aiReply = await getAIResponse(
+      this.businessId,
+      history,
+      userMessage,
+      conv.sessionData || {}
+    );
+    return { reply: aiReply, quickReplies: [], action: 'ai_response' };
+  }
+
   async advanceStep(stepId, userInput) {
     const conv = await this.loadConversation();
     if (!conv.currentFlowId) return null;
 
-    const flowDoc = await this.db
-      .collection('businesses')
-      .doc(this.businessId)
-      .collection('flows')
-      .doc(conv.currentFlowId)
-      .get();
+    const flow = await this.getFlowById(conv.currentFlowId);
+    if (!flow) return null;
 
-    if (!flowDoc.exists) return null;
-
-    const flow = flowDoc.data();
-    const currentStep = flow.steps.find((s) => s.id === stepId);
+    const currentStep = flow.steps?.find((s) => s.id === stepId);
     if (!currentStep) return null;
 
     const sanitizedInput = sanitizeInput(userInput);
-    if (currentStep.inputType) {
-      await this.saveSession({ [currentStep.inputType]: sanitizedInput, lastInput: sanitizedInput });
+    const aiConfig = await getBusinessAIConfig(this.businessId);
+
+    if (currentStep.quickReplies?.length || currentStep.conditions?.length) {
+      const nextFromChoice = this.resolveNextStepId(currentStep, sanitizedInput);
+      if (nextFromChoice === null && !currentStep.inputType) {
+        if (aiConfig.enableAI !== false) {
+          return this.getAIReply(sanitizedInput, conv);
+        }
+        return {
+          reply: `Please select one of the options below:\n\n${currentStep.message}`,
+          quickReplies: currentStep.quickReplies || [],
+          action: null,
+        };
+      }
     }
 
-    let nextStepId = currentStep.nextStepId;
-    if (currentStep.conditions?.length) {
-      const match = currentStep.conditions.find(
-        (c) => c.if.toLowerCase() === sanitizedInput.toLowerCase()
-      );
-      if (match) nextStepId = match.goto;
+    const sessionUpdate = { lastInput: sanitizedInput };
+    if (currentStep.quickReplies?.length) {
+      const choice = currentStep.quickReplies.find((q) => textsMatch(sanitizedInput, q));
+      if (choice) {
+        sessionUpdate.selection = choice;
+        sessionUpdate.lastChoice = choice;
+      }
     }
+    if (currentStep.inputType === 'date') sessionUpdate.date = sanitizedInput;
+    if (currentStep.inputType === 'text') sessionUpdate.time = sanitizedInput;
+    if (currentStep.inputType === 'phone') sessionUpdate.phone = sanitizedInput;
+    if (currentStep.inputType === 'email') sessionUpdate.email = sanitizedInput;
+
+    await this.saveSession(sessionUpdate);
+
+    const nextStepId = this.resolveNextStepId(currentStep, sanitizedInput);
 
     if (!nextStepId) {
+      if (currentStep.type === 'booking') {
+        return this.handleBookingStep(currentStep, { ...conv, sessionData: { ...conv.sessionData, ...sessionUpdate } });
+      }
+
       await SessionManager.updateConversation(this.conversationId, {
         currentFlowId: null,
         currentStepId: null,
       });
-      return { reply: 'Thank you! Is there anything else I can help with?', quickReplies: [], action: 'flow_complete' };
+      return {
+        reply: 'Thank you! Is there anything else I can help you with?',
+        quickReplies: [],
+        action: 'flow_complete',
+      };
     }
 
     const nextStep = flow.steps.find((s) => s.id === nextStepId);
     if (!nextStep) return null;
 
     await SessionManager.updateConversation(this.conversationId, { currentStepId: nextStepId });
-
-    const action = nextStep.type === 'booking' ? 'booking' : nextStep.type === 'handoff' ? 'handoff' : null;
-
-    return {
-      reply: nextStep.message,
-      quickReplies: nextStep.quickReplies || [],
-      action,
-      step: nextStep,
-    };
+    return this.renderStep(flow, nextStep);
   }
 
   async startFlow(flow) {
@@ -106,10 +309,22 @@ class FlowEngine {
       sessionData: {},
     });
 
+    return this.renderStep(flow, firstStep);
+  }
+
+  async repromptCurrentStep(conv) {
+    const flow = await this.getFlowById(conv.currentFlowId);
+    const step = flow?.steps?.find((s) => s.id === conv.currentStepId);
+    if (!step) return null;
+    return this.repromptStep(step);
+  }
+
+  async showFlowMenu(flows, business, aiConfig) {
+    const quickReplies = this.buildFlowMenu(flows);
     return {
-      reply: firstStep.message,
-      quickReplies: firstStep.quickReplies || [],
-      action: firstStep.type === 'booking' ? 'booking' : null,
+      reply: business?.welcomeMessage || aiConfig.fallbackMessage || 'How can I help you today?',
+      quickReplies,
+      action: null,
     };
   }
 
@@ -117,6 +332,8 @@ class FlowEngine {
     const sanitized = sanitizeInput(userMessage);
     const conv = await this.loadConversation();
     const aiConfig = await getBusinessAIConfig(this.businessId);
+    const business = await getBusiness(this.businessId);
+    const flows = await this.loadFlows();
 
     if (conv.status === 'handoff') {
       return { reply: null, action: 'handoff_active' };
@@ -131,29 +348,41 @@ class FlowEngine {
       };
     }
 
+    // User is inside an active flow — always follow the flow, never AI
     if (conv.currentFlowId && conv.currentStepId) {
       const result = await this.advanceStep(conv.currentStepId, sanitized);
       if (result) return result;
+      const reprompt = await this.repromptCurrentStep(conv);
+      if (reprompt) return reprompt;
     }
 
-    const matchedFlow = await this.matchFlow(sanitized);
+    // Match flow by trigger keyword, alias, or greeting
+    let matchedFlow = this.matchFlow(sanitized, flows);
+
+    // Match flow by menu label (flow name)
+    if (!matchedFlow) {
+      matchedFlow = flows.find((f) => textsMatch(sanitized, f.name) || textsMatch(sanitized, f.trigger));
+    }
+
+    // Auto-start default flow on first user message
+    if (!matchedFlow && flows.length > 0) {
+      const history = await SessionManager.getConversationHistory(this.conversationId, 5);
+      const userMessages = history.filter((m) => m.role === 'user');
+      if (userMessages.length <= 1) {
+        matchedFlow = flows[0];
+      }
+    }
+
     if (matchedFlow) {
       return this.startFlow(matchedFlow);
     }
 
-    const history = await SessionManager.getConversationHistory(this.conversationId);
-    const aiReply = await getAIResponse(
-      this.businessId,
-      history,
-      sanitized,
-      conv.sessionData || {}
-    );
+    // AI answers when no flow matches (default on; disable in AI Settings)
+    if (aiConfig.enableAI !== false) {
+      return this.getAIReply(sanitized, conv);
+    }
 
-    return {
-      reply: aiReply,
-      quickReplies: [],
-      action: null,
-    };
+    return this.showFlowMenu(flows, business, aiConfig);
   }
 }
 

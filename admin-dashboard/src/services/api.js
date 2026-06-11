@@ -49,6 +49,14 @@ export const api = {
     request(`/api/conversations/${id}/reply`, { method: 'POST', body: JSON.stringify({ message }) }),
   resolveConversation: (id) =>
     request(`/api/conversations/${id}/resolve`, { method: 'POST' }),
+  getPlans: () => fetch(`${BASE_URL}/api/plans`).then((r) => r.json()),
+  createPaymentOrder: (businessId, planId) =>
+    request('/api/payments/create-order', {
+      method: 'POST',
+      body: JSON.stringify({ businessId, planId }),
+    }),
+  verifyPayment: (data) =>
+    request('/api/payments/verify', { method: 'POST', body: JSON.stringify(data) }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',

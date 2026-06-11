@@ -10,6 +10,7 @@ const widgetRoutes = require('./routes/widget');
 const appointmentRoutes = require('./routes/appointments');
 const broadcastRoutes = require('./routes/broadcast');
 const adminRoutes = require('./routes/admin');
+const paymentRoutes = require('./routes/payments');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,6 +36,7 @@ app.use(widgetRoutes);
 app.use(appointmentRoutes);
 app.use(broadcastRoutes);
 app.use(adminRoutes);
+app.use(paymentRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error:', err);

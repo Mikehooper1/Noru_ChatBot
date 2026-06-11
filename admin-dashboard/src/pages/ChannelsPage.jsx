@@ -35,6 +35,7 @@ export default function ChannelsPage() {
             businessId={currentBusiness?.id}
             channel={ch.id}
             config={configs[ch.id]}
+            plan={currentBusiness?.plan || 'free'}
             label={ch.label}
             icon={ch.icon}
           />

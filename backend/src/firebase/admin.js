@@ -103,9 +103,10 @@ async function getBusinessAIConfig(businessId) {
     enableHandoff: true,
     handoffTriggers: ['human', 'agent', 'help'],
     handoffMessage: 'Connecting you to a human agent. Please wait...',
-    fallbackMessage: 'Sorry, I could not understand that.',
+    fallbackMessage: 'How can I help you today? Please choose an option below.',
     language: 'en',
     knowledgeBase: '',
+    enableAI: true,
   };
 }
 

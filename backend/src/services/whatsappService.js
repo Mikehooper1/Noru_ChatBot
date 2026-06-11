@@ -38,6 +38,30 @@ class WhatsAppService {
     );
   }
 
+  async sendCtaUrl(to, text, displayText, url) {
+    return axios.post(
+      this.apiUrl,
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'interactive',
+        interactive: {
+          type: 'cta_url',
+          body: { text: text.substring(0, 1024) },
+          action: {
+            name: 'cta_url',
+            parameters: {
+              display_text: displayText.substring(0, 20),
+              url,
+            },
+          },
+        },
+      },
+      { headers: this.headers }
+    );
+  }
+
   async sendQuickReplies(to, text, buttons) {
     const replyButtons = buttons.slice(0, 3).map((btn, i) => ({
       type: 'reply',

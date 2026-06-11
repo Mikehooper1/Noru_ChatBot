@@ -1,6 +1,6 @@
-# Noru ChatBot — Multi-Business AI Chatbot Platform
+# Noru ChatBot — Multi-Business AI Agent Platform
 
-Production-ready, multi-tenant AI chatbot SaaS platform with WhatsApp, Telegram, and embeddable website widget support.
+Production-ready, multi-tenant **AI agent** SaaS that chats with customers, takes bookings, and sends reminders across **Website**, **WhatsApp**, **Telegram**, and **Instagram** (Enterprise). Business owners upgrade plans in-app with **UPI or Card** (Razorpay).
 
 ## Stack
 
@@ -10,15 +10,16 @@ Production-ready, multi-tenant AI chatbot SaaS platform with WhatsApp, Telegram,
 | Backend | Node.js 20 + Express |
 | Database | Firebase Firestore |
 | Auth | Firebase Authentication |
-| AI | OpenAI API (`gpt-4o`) |
-| Channels | WhatsApp Cloud API, Telegram Bot API, Website Widget |
+| AI | OpenAI + Gemini with automatic failover |
+| Channels | WhatsApp Cloud API, Telegram Bot API, Website Widget, Instagram (Enterprise) |
+| Billing | Razorpay (UPI, Cards) with mock mode for local testing |
 
 ## Prerequisites
 
 - Node.js 20+
 - Firebase CLI (`npm install -g firebase-tools`)
 - Firebase project with Firestore, Auth, and Storage enabled
-- OpenAI API key
+- OpenAI API key and/or Gemini API key
 - Meta Developer account (WhatsApp)
 - Telegram BotFather bot token (optional)
 
@@ -49,7 +50,7 @@ Production-ready, multi-tenant AI chatbot SaaS platform with WhatsApp, Telegram,
 cp backend/.env.example backend/.env
 ```
 
-Fill in Firebase Admin credentials, OpenAI API key, and WhatsApp verify token.
+Fill in Firebase Admin credentials, AI API keys (OpenAI and/or Gemini), WhatsApp verify token, and Razorpay keys (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`). Without Razorpay keys, payments run in **mock mode** for testing.
 
 **Admin Dashboard** — copy `admin-dashboard/.env.example` to `admin-dashboard/.env`:
 
@@ -106,11 +107,12 @@ Open http://localhost:5173 and sign in with your Firebase account.
 
 ## WhatsApp Webhook
 
-1. In Meta Developer Console, set webhook URL to:
-   ```
-   https://your-backend-url/webhook/whatsapp
-   ```
-2. Set verify token to match `WHATSAPP_VERIFY_TOKEN` in `.env`
+See **[WhatsApp — Auto AI Replies](#whatsapp--auto-ai-replies)** above for the full setup guide.
+
+Quick reference:
+
+1. Webhook URL: `https://your-backend-url/webhook/whatsapp`
+2. Verify token: match `WHATSAPP_VERIFY_TOKEN` in backend `.env`
 3. Subscribe to `messages` field
 4. Configure phone number ID and access token in Admin → Channels → WhatsApp
 
@@ -125,7 +127,117 @@ Open http://localhost:5173 and sign in with your Firebase account.
 
 ## Website Widget Embed
 
-Add to any website:
+### 1. Get your embed code
+
+In **Admin → Channels → Website → Configure**, copy the embed code. It looks like:
+
+```html
+<script>
+  window.BotConfig = {
+    businessId: "YOUR_BUSINESS_ID",
+    primaryColor: "#4F46E5",
+    position: "bottom-right",
+    backendUrl: "https://your-backend.up.railway.app"
+  };
+</script>
+<script src="https://your-backend.up.railway.app/widget.min.js" defer></script>
+```
+
+Paste both `<script>` tags before `</body>` on your website.
+
+### 2. Important URLs
+
+| URL | Works? |
+|-----|--------|
+| `https://YOUR-BACKEND/widget.min.js` | ✅ Correct |
+| `https://YOUR-BACKEND/widget.js` | ✅ Also works (alias) |
+| `https://YOUR-ADMIN/widget.min.js` | ❌ 404 — widget is served by **backend**, not admin |
+| `widget.js` on your own site without hosting | ❌ 404 — must load from backend URL |
+
+### 3. Fix 404 errors
+
+The widget file is served by your **Express backend** (Railway), not Netlify admin.
+
+1. Set `backendUrl` in `BotConfig` to your live Railway URL (no trailing slash)
+2. Use `https://YOUR-RAILWAY-URL/widget.min.js` as the script `src`
+3. Redeploy backend after updates — `npm start` runs `copy-widget` automatically
+4. Test in browser: open `https://YOUR-RAILWAY-URL/widget.min.js` — you should see JavaScript, not 404
+
+Build locally:
+
+```bash
+cd widget && npm install && npm run build
+cd ../backend && npm run copy-widget
+```
+
+## WhatsApp — Auto AI Replies
+
+WhatsApp requires a **Pro plan** (or higher). Once configured, every incoming WhatsApp message is handled automatically: flows run first, then AI replies.
+
+### Step 1 — Meta Developer setup
+
+1. Go to [developers.facebook.com](https://developers.facebook.com) → **Create App** → type **Business**
+2. Add product **WhatsApp** → **API Setup**
+3. Copy **Phone number ID** and generate a **Permanent access token**
+4. Note your test phone number (or add a production number)
+
+### Step 2 — Backend webhook (Railway)
+
+In Railway → your backend service → **Variables**, set:
+
+```env
+WHATSAPP_VERIFY_TOKEN=any_random_string_you_choose
+BACKEND_URL=https://your-backend.up.railway.app
+```
+
+Redeploy the backend.
+
+### Step 3 — Meta webhook URL
+
+In Meta → WhatsApp → **Configuration** → **Webhook**:
+
+| Field | Value |
+|-------|-------|
+| Callback URL | `https://your-backend.up.railway.app/webhook/whatsapp` |
+| Verify token | Same string as `WHATSAPP_VERIFY_TOKEN` |
+| Subscribe | ✅ **messages** |
+
+Click **Verify and Save**. Meta sends a GET request; the backend must respond with the challenge.
+
+### Step 4 — Admin dashboard
+
+1. **Upgrade to Pro** (Plans page) if on Free
+2. Go to **Channels → WhatsApp → Configure**
+3. Enter **Phone Number ID** and **Access Token** from Meta
+4. Save, then **toggle WhatsApp ON**
+5. Ensure **AI is enabled** (AI Settings) and you have flows or AI fallback configured
+
+### Step 5 — Test
+
+Send a WhatsApp message to your business number from a phone added as a test recipient (Meta sandbox) or your connected number.
+
+**Flow:**
+```
+Customer WhatsApp message
+  → Meta sends POST to /webhook/whatsapp
+  → Backend finds business by phoneNumberId
+  → Flow engine + AI generates reply
+  → Reply sent back via WhatsApp Cloud API
+```
+
+### WhatsApp troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Webhook verify fails | `WHATSAPP_VERIFY_TOKEN` must match Meta exactly |
+| Messages not received | Subscribe to **messages** field in Meta |
+| No AI reply | Check Phone Number ID matches Meta; channel toggled ON; Pro plan active |
+| Upgrade message instead | Business is on Free plan — upgrade to Pro |
+| 403 from Meta API | Access token expired or wrong; regenerate in Meta |
+
+The webhook URL is also shown inside **Channels → WhatsApp → Configure** in the admin dashboard.
+
+### Legacy embed (manual)
 
 ```html
 <script>
@@ -136,10 +248,10 @@ Add to any website:
     backendUrl: "https://your-backend-url"
   };
 </script>
-<script src="https://your-cdn.com/widget.min.js"></script>
+<script src="https://your-backend-url/widget.min.js"></script>
 ```
 
-Build the widget with `cd widget && npm run build`. Output is at `widget/dist/widget.min.js`.
+Build the widget with `cd widget && npm run build && cd ../backend && npm run copy-widget`.
 
 ## Deployment
 
@@ -158,11 +270,34 @@ firebase deploy --only hosting
 3. Add all environment variables from `.env.example`
 4. Start command: `npm start`
 
+## Plans & Limits
+
+| Plan | Channels | Chat memory | Reminders | Price |
+|---|---|---|---|---|
+| **Free** | Website only | 24 hours | No | ₹0 |
+| **Pro** | Website + WhatsApp + Telegram | 30 days | Yes | ₹999/mo |
+| **Enterprise** | + Instagram | 30 days | Yes | ₹2,999/mo |
+
+- **Free** — website widget, 24-hour conversation memory, 200 messages/month
+- **Pro** — WhatsApp & Telegram, 30-day memory, appointment reminders, agent inbox
+- **Enterprise** — Instagram + unlimited agents
+
+Upgrade in **Admin → Plans** (UPI / Card via Razorpay). When limits are hit, the AI agent sends **inline checkout links** on WhatsApp/Telegram — tap to pay with UPI or Card without opening the admin dashboard.
+
+## How the AI Agent Works
+
+1. Customer messages on **website**, **WhatsApp**, or **Telegram** (channel gated by plan)
+2. **Flow engine** runs booking flows first (appointments, FAQs, handoff)
+3. **AI** (OpenAI + Gemini failover) answers questions the flow does not cover
+4. **Appointments** are saved to Firestore; admins see them in real time
+5. **Reminders** cron (every 15 min) sends WhatsApp/Telegram reminders on Pro+ plans
+
 ## Features
 
 - Multi-tenant business management
 - Visual flow builder with drag-and-drop steps
-- OpenAI fallback when no flow matches
+- Multi-provider AI (OpenAI + Gemini) with automatic failover on rate limits
+- AI fallback when no flow matches
 - WhatsApp, Telegram, and website widget channels
 - Appointment booking with Google Calendar sync
 - Broadcast messaging
@@ -185,6 +320,12 @@ firebase deploy --only hosting
 | POST | `/api/appointments` | Create appointment |
 | POST | `/api/broadcasts` | Send broadcast |
 | GET | `/api/analytics/daily` | Daily analytics |
+| GET | `/api/plans` | List plan definitions |
+| GET | `/checkout` | Public mobile checkout page (UPI / Card) |
+| GET | `/api/payments/checkout-info` | Checkout session info (signed token) |
+| POST | `/api/payments/public-verify` | Verify payment from chat checkout link |
+| POST | `/api/payments/create-order` | Create Razorpay order (auth) |
+| POST | `/api/payments/verify` | Verify payment & activate plan (auth) |
 
 Protected endpoints require `Authorization: Bearer <Firebase ID Token>`.
 

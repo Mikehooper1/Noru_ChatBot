@@ -12,6 +12,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore';
 import { app } from './config';
 
@@ -30,4 +31,5 @@ export {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
 };

@@ -3,7 +3,9 @@ import { doc, setDoc } from '../../firebase/firestore';
 import { db } from '../../firebase/firestore';
 import { Toggle } from '../shared/Toggle';
 import { Input, Select } from '../shared/Input';
+import { Link } from 'react-router-dom';
 import { Button } from '../shared/Button';
+import { channelAllowed } from '../../constants/plans';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
 
@@ -21,7 +23,9 @@ function buildEmbedCode(businessId, websiteConfig) {
 <script src="${BACKEND_URL}/widget.min.js" defer></script>`;
 }
 
-export default function ChannelToggle({ businessId, channel, config, label, icon }) {
+export default function ChannelToggle({ businessId, channel, config, label, icon, plan = 'free' }) {
+  const allowedByPlan = channelAllowed(plan, channel);
+  const requiredPlan = channel === 'instagram' ? 'Enterprise' : channel !== 'website' ? 'Pro' : null;
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ enabled: false, ...(config || {}) });
   const [copied, setCopied] = useState(false);
@@ -67,6 +71,10 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
   };
 
   const handleEnabledChange = async (enabled) => {
+    if (enabled && !allowedByPlan) {
+      setError(`${label} requires ${requiredPlan} plan. Upgrade in Plans.`);
+      return;
+    }
     try {
       await persistConfig({ enabled });
     } catch {
@@ -106,15 +114,22 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
             <span className={`text-xs px-2 py-0.5 rounded-full ${form.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
               {form.enabled ? 'Connected' : 'Not connected'}
             </span>
+            {!allowedByPlan && (
+              <span className="text-xs text-amber-600 mt-1 block">Requires {requiredPlan} plan</span>
+            )}
             {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Toggle
-            enabled={!!form.enabled}
-            onChange={handleEnabledChange}
-            disabled={saving || !businessId}
-          />
+          {!allowedByPlan ? (
+            <Link to="/plans" className="text-xs text-primary font-medium hover:underline">Upgrade</Link>
+          ) : (
+            <Toggle
+              enabled={!!form.enabled}
+              onChange={handleEnabledChange}
+              disabled={saving || !businessId}
+            />
+          )}
           <Button variant="secondary" onClick={openModal} disabled={!businessId}>
             Configure
           </Button>
@@ -127,9 +142,15 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
             <h3 className="text-lg font-semibold">Configure {label}</h3>
             {channel === 'whatsapp' && (
               <>
-                <Input label="Phone Number ID" value={form.phoneNumberId || ''} onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })} />
-                <Input label="Access Token" type="password" value={form.accessToken || ''} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} placeholder="Leave blank to keep existing token" />
-                <Input label="Verify Token" value={form.verifyToken || ''} onChange={(e) => setForm({ ...form, verifyToken: e.target.value })} />
+                <Input label="Phone Number ID" value={form.phoneNumberId || ''} onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })} placeholder="From Meta → WhatsApp → API Setup" />
+                <Input label="Access Token" type="password" value={form.accessToken || ''} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} placeholder="Permanent token from Meta Business" />
+                <Input label="Verify Token" value={form.verifyToken || ''} onChange={(e) => setForm({ ...form, verifyToken: e.target.value })} placeholder="Same as WHATSAPP_VERIFY_TOKEN on backend" />
+                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
+                  <p className="font-semibold">Webhook URL (paste in Meta Developer Console)</p>
+                  <code className="block break-all bg-white px-2 py-1 rounded border">{`${BACKEND_URL}/webhook/whatsapp`}</code>
+                  <p>Subscribe to <strong>messages</strong>. Set verify token to match backend <code>WHATSAPP_VERIFY_TOKEN</code>.</p>
+                  <p>Requires <strong>Pro</strong> plan. Toggle WhatsApp on after saving credentials.</p>
+                </div>
               </>
             )}
             {channel === 'telegram' && (

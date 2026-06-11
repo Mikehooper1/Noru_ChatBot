@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const { getDb, getFieldValue } = require('../firebase/admin');
 const WhatsAppService = require('./whatsappService');
 const { sendMessage } = require('./telegramService');
+const { checkRemindersAllowed } = require('./planService');
 
 async function checkAndSendReminders() {
   const now = new Date();
@@ -21,7 +22,13 @@ async function checkAndSendReminders() {
 
     if (apptTime <= in60Min && apptTime > now) {
       try {
-        const message = `Reminder: Your appointment for ${appt.serviceName} is at ${appt.time} today. See you soon!`;
+        const remindersAllowed = await checkRemindersAllowed(appt.businessId);
+        if (!remindersAllowed) {
+          console.log(`Skipping reminder for ${doc.id} — plan does not include reminders`);
+          continue;
+        }
+
+        const message = `🔔 Reminder: Your appointment for ${appt.serviceName} is today at ${appt.time}. See you soon!`;
 
         if (appt.channel === 'whatsapp' && appt.userPhone) {
           const wa = new WhatsAppService(appt.businessId);
@@ -29,6 +36,16 @@ async function checkAndSendReminders() {
           await wa.sendTextMessage(appt.userPhone, message);
         } else if (appt.channel === 'telegram' && appt.userId) {
           await sendMessage(appt.businessId, appt.userId, message);
+        } else if (appt.channel === 'website') {
+          await getDb().collection('notifications').add({
+            businessId: appt.businessId,
+            userId: appt.userId,
+            type: 'appointment_reminder',
+            message,
+            appointmentId: doc.id,
+            read: false,
+            createdAt: getFieldValue().serverTimestamp(),
+          });
         }
 
         await doc.ref.update({ reminderSent: true, updatedAt: getFieldValue().serverTimestamp() });

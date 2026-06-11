@@ -2,6 +2,8 @@ import { NavLink } from 'react-router-dom';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: '📊' },
+  { to: '/businesses', label: 'My Chatbots', icon: '🤖' },
+  { to: '/agents', label: 'Agent Inbox', icon: '💬' },
   { to: '/flows', label: 'Flows', icon: '🔀' },
   { to: '/services', label: 'Services', icon: '🛎️' },
   { to: '/channels', label: 'Channels', icon: '📡' },
@@ -9,6 +11,7 @@ const navItems = [
   { to: '/appointments', label: 'Appointments', icon: '📅' },
   { to: '/broadcast', label: 'Broadcast', icon: '📢' },
   { to: '/analytics', label: 'Analytics', icon: '📈' },
+  { to: '/plans', label: 'Plans', icon: '💳' },
 ];
 
 export default function Sidebar() {

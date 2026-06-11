@@ -61,8 +61,14 @@ async function getAppointments(req, res) {
 
     if (status) query = query.where('status', '==', status);
 
-    const snap = await query.orderBy('date', 'desc').get();
+    let snap;
+    try {
+      snap = await query.orderBy('date', 'desc').get();
+    } catch {
+      snap = await query.get();
+    }
     let appointments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    appointments.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
 
     if (from) appointments = appointments.filter((a) => a.date >= from);
     if (to) appointments = appointments.filter((a) => a.date <= to);

@@ -11,6 +11,9 @@ import AISettingsPage from './pages/AISettingsPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import BroadcastPage from './pages/BroadcastPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import AgentsPage from './pages/AgentsPage';
+import BusinessesPage from './pages/BusinessesPage';
+import PlansPage from './pages/PlansPage';
 
 function ProtectedLayout({ children }) {
   const { user, loading } = useAuth();
@@ -45,6 +48,9 @@ export default function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
       <Route path="/dashboard" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
+      <Route path="/businesses" element={<ProtectedLayout><BusinessesPage /></ProtectedLayout>} />
+      <Route path="/agents" element={<ProtectedLayout><AgentsPage /></ProtectedLayout>} />
+      <Route path="/plans" element={<ProtectedLayout><PlansPage /></ProtectedLayout>} />
       <Route path="/flows" element={<ProtectedLayout><FlowsPage /></ProtectedLayout>} />
       <Route path="/services" element={<ProtectedLayout><ServicesPage /></ProtectedLayout>} />
       <Route path="/channels" element={<ProtectedLayout><ChannelsPage /></ProtectedLayout>} />

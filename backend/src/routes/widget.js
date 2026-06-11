@@ -1,10 +1,34 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { handleWidgetMessage } = require('../controllers/messageController');
 const { getBusiness, getDb } = require('../firebase/admin');
 const { apiLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
+
+const WIDGET_PATHS = [
+  path.join(__dirname, '../../public/widget.min.js'),
+  path.join(__dirname, '../../../widget/dist/widget.min.js'),
+];
+
+function resolveWidgetFile() {
+  return WIDGET_PATHS.find((filePath) => fs.existsSync(filePath)) || null;
+}
+
+function serveWidget(_req, res) {
+  const file = resolveWidgetFile();
+  if (!file) {
+    return res.status(404).json({
+      error: 'Widget not found on server',
+      hint: 'Run: cd backend && npm run copy-widget',
+      urls: ['/widget.min.js', '/widget.js'],
+    });
+  }
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(file);
+}
 
 async function getWebsiteChannel(businessId) {
   const doc = await getDb()
@@ -18,7 +42,7 @@ async function getWebsiteChannel(businessId) {
 
 router.post('/api/widget/message', apiLimiter, async (req, res) => {
   try {
-    const { businessId, sessionId, message, userName } = req.body;
+    const { businessId, sessionId, message, userName, userPhone } = req.body;
 
     if (!businessId || !message) {
       return res.status(400).json({ error: 'businessId and message are required' });
@@ -34,7 +58,7 @@ router.post('/api/widget/message', apiLimiter, async (req, res) => {
       return res.status(403).json({ error: 'Website widget channel is disabled' });
     }
 
-    const result = await handleWidgetMessage({ businessId, sessionId, message, userName });
+    const result = await handleWidgetMessage({ businessId, sessionId, message, userName, userPhone });
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -65,8 +89,7 @@ router.get('/api/widget/config/:businessId', async (req, res) => {
   }
 });
 
-router.get('/widget.min.js', (_req, res) => {
-  res.sendFile(path.join(__dirname, '../../../widget/dist/widget.min.js'));
-});
+router.get('/widget.min.js', serveWidget);
+router.get('/widget.js', serveWidget);
 
 module.exports = router;

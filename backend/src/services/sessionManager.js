@@ -15,7 +15,26 @@ class SessionManager {
 
     if (!existing.empty) {
       const doc = existing.docs[0];
-      return { id: doc.id, ...doc.data() };
+      const data = doc.data();
+
+      // Update user info if we now have better data than what's stored
+      const updates = {};
+      if (userData.name && userData.name !== 'Visitor' && (!data.userName || data.userName === 'Visitor' || data.userName === '')) {
+        updates.userName = userData.name;
+      }
+      if (userData.phone && (!data.userPhone || data.userPhone === '')) {
+        updates.userPhone = userData.phone;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await db.collection('conversations').doc(doc.id).update({
+          ...updates,
+          updatedAt: getFieldValue().serverTimestamp(),
+        });
+        return { id: doc.id, ...data, ...updates };
+      }
+
+      return { id: doc.id, ...data };
     }
 
     const conversationId = uuidv4();
@@ -92,6 +111,14 @@ class SessionManager {
     await this.updateConversation(conversationId, {
       status: 'active',
       assignedAgent: null,
+    });
+  }
+
+  static async resolveConversation(conversationId) {
+    await this.updateConversation(conversationId, {
+      status: 'resolved',
+      currentFlowId: null,
+      currentStepId: null,
     });
   }
 }

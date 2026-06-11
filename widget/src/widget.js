@@ -12,8 +12,23 @@ const WIDGET_CSS = `
 .widget-header-info h4{margin:0;font-size:16px;font-weight:600}
 .widget-header-info p{margin:0;font-size:12px;opacity:.85}
 .widget-close{margin-left:auto;background:none;border:none;color:white;cursor:pointer;font-size:20px;padding:4px}
+.widget-intro{flex:1;display:flex;align-items:center;justify-content:center;background:#f9fafb;padding:20px}
+.widget-intro-inner{width:100%;max-width:300px;text-align:center}
+.widget-intro-icon{font-size:40px;margin-bottom:12px;animation:widget-wave 1.5s ease-in-out infinite}
+@keyframes widget-wave{0%,100%{transform:rotate(0deg)}25%{transform:rotate(20deg)}50%{transform:rotate(-10deg)}75%{transform:rotate(15deg)}}
+.widget-intro-welcome{font-size:15px;color:#374151;margin:0 0 4px;font-weight:500;line-height:1.4}
+.widget-intro-subtitle{font-size:12px;color:#9ca3af;margin:0 0 16px}
+.widget-intro-form{text-align:left}
+.widget-intro-label{display:block;font-size:12px;font-weight:600;color:#6b7280;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.widget-intro-input{width:100%;padding:10px 14px;border:1px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;margin-bottom:12px;transition:border-color .2s}
+.widget-intro-input:focus{border-color:var(--widget-primary,#4F46E5);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+.widget-intro-error{font-size:12px;color:#ef4444;margin:0 0 8px;padding:6px 10px;background:#fef2f2;border-radius:6px}
+.widget-intro-btn{width:100%;padding:12px;border:none;border-radius:10px;background:var(--widget-primary,#4F46E5);color:white;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s,transform .1s}
+.widget-intro-btn:hover{opacity:.9}
+.widget-intro-btn:active{transform:scale(.98)}
 .widget-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:#f9fafb}
-.widget-msg{max-width:80%;padding:10px 14px;border-radius:12px;word-wrap:break-word}
+.widget-msg{max-width:80%;padding:10px 14px;border-radius:12px;word-wrap:break-word;animation:widget-fadeIn .3s ease}
+@keyframes widget-fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .widget-msg-bot{background:white;border:1px solid #e5e7eb;align-self:flex-start;border-bottom-left-radius:4px}
 .widget-msg-user{background:var(--widget-primary,#4F46E5);color:white;align-self:flex-end;border-bottom-right-radius:4px}
 .widget-typing{display:flex;gap:4px;padding:10px 14px;background:white;border:1px solid #e5e7eb;border-radius:12px;align-self:flex-start;width:fit-content}
@@ -46,6 +61,7 @@ function initWidget() {
   const businessId = config.businessId;
   const backendUrl = normalizeBackendUrl(config.backendUrl);
   const storageKey = `noru_chat_${businessId}`;
+  const userStorageKey = `noru_user_${businessId}`;
 
   if (!businessId) {
     console.error('[Noru ChatBot] businessId is required in window.BotConfig');
@@ -58,6 +74,13 @@ function initWidget() {
 
   let sessionId = localStorage.getItem(storageKey);
 
+  // Load saved user info
+  let savedUser = null;
+  try {
+    const raw = localStorage.getItem(userStorageKey);
+    if (raw) savedUser = JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+
   const host = document.createElement('div');
   host.id = 'noru-chatbot-widget';
   getMountTarget().appendChild(host);
@@ -69,6 +92,8 @@ function initWidget() {
   shadow.appendChild(style);
 
   let chatUI;
+  let userName = savedUser?.name || '';
+  let userPhone = savedUser?.phone || '';
 
   async function loadConfig() {
     try {
@@ -95,7 +120,7 @@ function initWidget() {
       const res = await fetch(`${backendUrl}/api/widget/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, sessionId, message }),
+        body: JSON.stringify({ businessId, sessionId, message, userName, userPhone }),
       });
       const data = await res.json();
       chatUI.hideTyping();
@@ -108,6 +133,10 @@ function initWidget() {
       if (data.sessionId) {
         sessionId = data.sessionId;
         localStorage.setItem(storageKey, sessionId);
+      }
+
+      if (data.upgradeUrl) {
+        chatUI.showUpgradeBanner(data.upgradeUrl);
       }
 
       if (data.reply) {
@@ -129,7 +158,23 @@ function initWidget() {
     chatUI = new ChatUI(shadow, { ...config, ...widgetConfig });
     chatUI.render();
     chatUI.onSend = sendMessage;
-    chatUI.showWelcome(widgetConfig.welcomeMessage);
+
+    // If user already provided info previously, skip intro
+    if (savedUser?.name && savedUser?.phone) {
+      chatUI.setIntroComplete(savedUser.name, savedUser.phone);
+    }
+
+    // When intro form is completed
+    chatUI.onIntroComplete = (userData) => {
+      userName = userData.name;
+      userPhone = userData.phone;
+
+      // Persist user info so they don't have to fill it again
+      localStorage.setItem(userStorageKey, JSON.stringify({
+        name: userData.name,
+        phone: userData.phone,
+      }));
+    };
   });
 }
 

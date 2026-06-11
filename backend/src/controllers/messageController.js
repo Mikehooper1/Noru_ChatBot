@@ -2,21 +2,55 @@ const { v4: uuidv4 } = require('uuid');
 const FlowEngine = require('../services/flowEngine');
 const SessionManager = require('../services/sessionManager');
 const WhatsAppService = require('../services/whatsappService');
-const { sendMessage, buildInlineKeyboard } = require('../services/telegramService');
+const {
+  sendMessage,
+  buildInlineKeyboard,
+  buildPaymentKeyboard,
+} = require('../services/telegramService');
 const { trackEvent } = require('../services/analyticsService');
 const { getBusinessByPhoneNumberId, logError } = require('../firebase/admin');
 const { sanitizeInput } = require('../utils/sanitize');
+const {
+  checkPlanAccess,
+  incrementUsage,
+  isConversationExpired,
+  getPlan,
+} = require('../services/planService');
 
 async function processIncomingMessage({ businessId, channel, userId, userMessage, userData = {} }) {
   try {
-    const conversation = await SessionManager.getOrCreateConversation(
+    const planCheck = await checkPlanAccess(businessId, channel);
+    if (!planCheck.allowed) {
+      return {
+        conversationId: null,
+        reply: planCheck.reply,
+        quickReplies: planCheck.quickReplies || [],
+        action: planCheck.action,
+        upgradeUrl: planCheck.upgradeUrl,
+        paymentLinks: planCheck.paymentLinks || [],
+      };
+    }
+
+    let conversation = await SessionManager.getOrCreateConversation(
       businessId,
       channel,
       userId,
       userData
     );
 
+    const plan = getPlan(planCheck.planId);
+    if (isConversationExpired(conversation, plan)) {
+      await SessionManager.resolveConversation(conversation.id);
+      conversation = await SessionManager.getOrCreateConversation(
+        businessId,
+        channel,
+        userId,
+        userData
+      );
+    }
+
     await SessionManager.saveMessage(conversation.id, 'user', userMessage);
+    await incrementUsage(businessId, 'messages');
     await trackEvent(businessId, channel, 'message_received');
 
     const engine = new FlowEngine(businessId, conversation.id);
@@ -80,7 +114,23 @@ async function handleWhatsAppWebhook(body) {
       const wa = new WhatsAppService(business.id);
       await wa.init();
 
-      if (result.quickReplies?.length) {
+      if (result.action === 'upgrade_required' && result.paymentLinks?.length) {
+        const primary = result.paymentLinks[0];
+        await wa.sendCtaUrl(
+          from,
+          result.reply,
+          `Pay ${primary.planName} ₹${primary.price}`,
+          primary.url
+        );
+        for (const link of result.paymentLinks.slice(1)) {
+          await wa.sendCtaUrl(
+            from,
+            `Or upgrade to ${link.planName} for more channels & features.`,
+            `Pay ${link.planName} ₹${link.price}`,
+            link.url
+          );
+        }
+      } else if (result.quickReplies?.length) {
         await wa.sendQuickReplies(from, result.reply, result.quickReplies);
       } else {
         await wa.sendTextMessage(from, result.reply);
@@ -115,19 +165,22 @@ async function handleTelegramUpdate(businessId, update) {
   });
 
   if (result.reply) {
-    const keyboard = buildInlineKeyboard(result.quickReplies);
+    const keyboard =
+      result.action === 'upgrade_required' && result.paymentLinks?.length
+        ? buildPaymentKeyboard(result.paymentLinks)
+        : buildInlineKeyboard(result.quickReplies);
     await sendMessage(businessId, chatId, result.reply, keyboard);
   }
 }
 
-async function handleWidgetMessage({ businessId, sessionId, message, userName }) {
+async function handleWidgetMessage({ businessId, sessionId, message, userName, userPhone }) {
   const userId = sessionId || uuidv4();
   const result = await processIncomingMessage({
     businessId,
     channel: 'website',
     userId,
     userMessage: sanitizeInput(message),
-    userData: { name: userName || 'Visitor' },
+    userData: { name: userName || 'Visitor', phone: userPhone || '' },
   });
 
   return { ...result, sessionId: userId };

@@ -5,13 +5,16 @@
   "main": "src/app.js",
   "scripts": {
     "dev": "nodemon src/app.js",
+    "prestart": "node scripts/copy-widget.js",
     "start": "node src/app.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "copy-widget": "node scripts/copy-widget.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

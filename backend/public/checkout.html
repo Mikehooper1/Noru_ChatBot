@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Noru — Upgrade Plan</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px 24px;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      text-align: center;
+    }
+    .logo { font-size: 36px; margin-bottom: 8px; }
+    h1 { font-size: 20px; color: #111; margin-bottom: 4px; }
+    .sub { color: #6B7280; font-size: 14px; margin-bottom: 20px; }
+    .plan-box {
+      background: #F9FAFB;
+      border: 1px solid #E5E7EB;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .plan-name { font-weight: 700; font-size: 18px; color: #4F46E5; }
+    .plan-price { font-size: 28px; font-weight: 800; color: #111; margin: 4px 0; }
+    .plan-meta { font-size: 12px; color: #6B7280; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .btn-primary { background: #4F46E5; color: #fff; }
+    .btn-primary:disabled { opacity: .6; cursor: wait; }
+    .btn-secondary { background: #F3F4F6; color: #374151; }
+    .methods { font-size: 12px; color: #9CA3AF; margin-top: 12px; }
+    .status { font-size: 14px; margin-top: 12px; padding: 10px; border-radius: 8px; }
+    .status.ok { background: #D1FAE5; color: #065F46; }
+    .status.err { background: #FEE2E2; color: #991B1B; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🤖</div>
+    <h1>Noru AI Agent</h1>
+    <p class="sub">Upgrade your chatbot plan</p>
+
+    <div id="loading" class="sub">Loading checkout...</div>
+
+    <div id="checkout" class="hidden">
+      <div class="plan-box">
+        <div class="plan-name" id="planName">Pro</div>
+        <div class="plan-price" id="planPrice">₹999</div>
+        <div class="plan-meta" id="businessName">for your chatbot</div>
+      </div>
+      <button class="btn btn-primary" id="payUpi">Pay with UPI</button>
+      <button class="btn btn-secondary" id="payCard">Pay with Card</button>
+      <p class="methods">Secured by Razorpay · UPI, Cards, Netbanking</p>
+    </div>
+
+    <div id="status" class="status hidden"></div>
+  </div>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const loading = document.getElementById('loading');
+    const checkout = document.getElementById('checkout');
+    const statusEl = document.getElementById('status');
+    let session = null;
+
+    function showStatus(msg, ok) {
+      statusEl.textContent = msg;
+      statusEl.className = 'status ' + (ok ? 'ok' : 'err');
+      statusEl.classList.remove('hidden');
+    }
+
+    async function loadSession() {
+      if (!token) throw new Error('Missing checkout token');
+      const res = await fetch('/api/payments/checkout-info?token=' + encodeURIComponent(token));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load checkout');
+      return data;
+    }
+
+    function openRazorpay(method) {
+      if (!session || session.mock) {
+        activateMock();
+        return;
+      }
+
+      const options = {
+        key: session.keyId,
+        amount: session.amount,
+        currency: session.currency,
+        name: 'Noru ChatBot',
+        description: session.planName + ' Plan — ' + session.businessName,
+        order_id: session.orderId,
+        handler: function (response) {
+          verifyPayment(response);
+        },
+        theme: { color: '#4F46E5' },
+        prefill: { name: session.businessName },
+      };
+
+      if (method === 'upi') {
+        options.method = { upi: true };
+      } else if (method === 'card') {
+        options.method = { card: true };
+      }
+
+      const rzp = new Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        showStatus('Payment failed: ' + (resp.error?.description || 'Try again'), false);
+      });
+      rzp.open();
+    }
+
+    async function verifyPayment(razorpayResponse) {
+      try {
+        const res = await fetch('/api/payments/public-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            orderId: razorpayResponse.razorpay_order_id,
+            paymentId: razorpayResponse.razorpay_payment_id,
+            signature: razorpayResponse.razorpay_signature,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Verification failed');
+        checkout.classList.add('hidden');
+        showStatus('✅ ' + data.planName + ' plan activated for 30 days! You can close this page and return to chat.', true);
+      } catch (err) {
+        showStatus(err.message, false);
+      }
+    }
+
+    async function activateMock() {
+      try {
+        const res = await fetch('/api/payments/public-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            orderId: session.orderId,
+            paymentId: 'mock_pay_' + Date.now(),
+            signature: 'mock',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Activation failed');
+        checkout.classList.add('hidden');
+        showStatus('✅ ' + data.planName + ' plan activated (test mode)! Return to WhatsApp/Telegram.', true);
+      } catch (err) {
+        showStatus(err.message, false);
+      }
+    }
+
+    loadSession()
+      .then(function (data) {
+        session = data;
+        loading.classList.add('hidden');
+        checkout.classList.remove('hidden');
+        document.getElementById('planName').textContent = data.planName + ' Plan';
+        document.getElementById('planPrice').textContent = '₹' + (data.amount / 100);
+        document.getElementById('businessName').textContent = 'for ' + data.businessName;
+      })
+      .catch(function (err) {
+        loading.classList.add('hidden');
+        showStatus(err.message, false);
+      });
+
+    document.getElementById('payUpi').onclick = function () { openRazorpay('upi'); };
+    document.getElementById('payCard').onclick = function () { openRazorpay('card'); };
+  </script>
+</body>
+</html>

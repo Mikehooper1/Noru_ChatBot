@@ -3,6 +3,7 @@ import { doc, updateDoc } from '../../firebase/firestore';
 import { db } from '../../firebase/firestore';
 import { Input, Textarea, Select } from '../shared/Input';
 import { Button } from '../shared/Button';
+import { Toggle } from '../shared/Toggle';
 import { api } from '../../services/api';
 
 export default function AISettingsForm({ businessId, aiConfig }) {
@@ -18,6 +19,7 @@ export default function AISettingsForm({ businessId, aiConfig }) {
     fallbackMessage: aiConfig?.fallbackMessage || '',
     language: aiConfig?.language || 'en',
     knowledgeBase: aiConfig?.knowledgeBase || '',
+    enableAI: aiConfig?.enableAI !== false,
   });
   const [saving, setSaving] = useState(false);
   const [testMessage, setTestMessage] = useState('');
@@ -48,14 +50,31 @@ export default function AISettingsForm({ businessId, aiConfig }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-4">
+        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div>
+            <p className="text-sm font-medium text-gray-800">AI agent</p>
+            <p className="text-xs text-gray-500">On = AI answers questions the flow doesn&apos;t know. Off = flows only.</p>
+          </div>
+          <Toggle
+            enabled={form.enableAI}
+            onChange={(v) => setForm({ ...form, enableAI: v })}
+          />
+        </div>
+        <p className="text-xs text-gray-500">
+          When AI is on, rate limits auto-switch between OpenAI and Gemini without showing errors to users.
+        </p>
         <Select
           label="Model"
           value={form.model}
           onChange={(e) => setForm({ ...form, model: e.target.value })}
           options={[
-            { value: 'gpt-4o', label: 'GPT-4o' },
-            { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-            { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+            { value: 'gpt-4o', label: 'GPT-4o (OpenAI)' },
+            { value: 'gpt-4o-mini', label: 'GPT-4o Mini (OpenAI)' },
+            { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (OpenAI)' },
+            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+            { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite' },
+            { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
           ]}
         />
         <Select

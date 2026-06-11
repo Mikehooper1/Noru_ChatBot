@@ -22,10 +22,15 @@ async function sendMessage(businessId, chatId, text, inlineKeyboard = null) {
   if (inlineKeyboard?.length) {
     options.reply_markup = {
       inline_keyboard: inlineKeyboard.map((row) =>
-        (Array.isArray(row) ? row : [row]).map((btn) => ({
-          text: btn.text || btn,
-          callback_data: btn.callback_data || btn.text || btn,
-        }))
+        (Array.isArray(row) ? row : [row]).map((btn) => {
+          if (typeof btn === 'string') {
+            return { text: btn, callback_data: btn };
+          }
+          const out = { text: btn.text };
+          if (btn.url) out.url = btn.url;
+          else out.callback_data = btn.callback_data || btn.text;
+          return out;
+        })
       ),
     };
   }
@@ -55,10 +60,18 @@ function buildInlineKeyboard(quickReplies) {
   return quickReplies.map((reply) => [{ text: reply, callback_data: reply }]);
 }
 
+function buildPaymentKeyboard(paymentLinks) {
+  if (!paymentLinks?.length) return null;
+  return paymentLinks.map((link) => [
+    { text: `💳 ${link.planName} ₹${link.price}`, url: link.url },
+  ]);
+}
+
 module.exports = {
   getTelegramBot,
   sendMessage,
   sendBookingConfirmation,
   setupWebhook,
   buildInlineKeyboard,
+  buildPaymentKeyboard,
 };

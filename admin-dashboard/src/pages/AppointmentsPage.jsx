@@ -1,33 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useBusiness } from '../hooks/useBusiness';
+import { useAppointments } from '../hooks/useAppointments';
 import { api } from '../services/api';
 import { Input, Select } from '../components/shared/Input';
 import { Button } from '../components/shared/Button';
 
 export default function AppointmentsPage() {
   const { currentBusiness } = useBusiness();
-  const [appointments, setAppointments] = useState([]);
-  const [view, setView] = useState('list');
   const [filters, setFilters] = useState({ status: '', from: '', to: '' });
+  const { appointments, loading, error } = useAppointments(currentBusiness?.id, filters);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ serviceName: '', userName: '', userPhone: '', date: '', time: '' });
 
-  const loadAppointments = () => {
-    if (!currentBusiness?.id) return;
-    api.getAppointments(currentBusiness.id, filters).then(setAppointments).catch(console.error);
+  const handleCreate = async () => {
+    await api.createAppointment({
+      ...form,
+      businessId: currentBusiness.id,
+      status: 'confirmed',
+      duration: 30,
+      channel: 'website',
+    });
+    setShowForm(false);
+    setForm({ serviceName: '', userName: '', userPhone: '', date: '', time: '' });
   };
 
-  useEffect(loadAppointments, [currentBusiness?.id, filters]);
-
-  const handleCreate = async () => {
-    await api.createAppointment({ ...form, businessId: currentBusiness.id, status: 'confirmed', duration: 30, channel: 'website' });
-    setShowForm(false);
-    loadAppointments();
+  const handleStatusChange = async (id, status) => {
+    await api.updateAppointment(id, { status });
   };
 
   const exportCSV = () => {
-    const headers = ['Service', 'User', 'Phone', 'Date', 'Time', 'Status'];
-    const rows = appointments.map((a) => [a.serviceName, a.userName, a.userPhone, a.date, a.time, a.status]);
+    const headers = ['Service', 'User', 'Phone', 'Date', 'Time', 'Status', 'Channel'];
+    const rows = appointments.map((a) => [a.serviceName, a.userName, a.userPhone, a.date, a.time, a.status, a.channel]);
     const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -37,12 +40,20 @@ export default function AppointmentsPage() {
     a.click();
   };
 
+  if (!currentBusiness) {
+    return <div className="p-6 text-gray-500">Select a chatbot to view appointments.</div>;
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Appointments</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Appointments</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Live updates for <strong>{currentBusiness.name}</strong> · {appointments.length} total
+          </p>
+        </div>
         <div className="flex gap-2">
-          <Button variant={view === 'list' ? 'primary' : 'secondary'} onClick={() => setView('list')}>List</Button>
           <Button variant="secondary" onClick={() => setShowForm(true)}>Manual Booking</Button>
           <Button variant="secondary" onClick={exportCSV}>Export CSV</Button>
         </div>
@@ -63,30 +74,52 @@ export default function AppointmentsPage() {
         <Input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
       </div>
 
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              {['Service', 'User', 'Phone', 'Date', 'Time', 'Status'].map((h) => (
-                <th key={h} className="px-4 py-3 text-left font-medium text-gray-600">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {appointments.map((appt) => (
-              <tr key={appt.id} className="border-t border-gray-100">
-                <td className="px-4 py-3">{appt.serviceName}</td>
-                <td className="px-4 py-3">{appt.userName}</td>
-                <td className="px-4 py-3">{appt.userPhone}</td>
-                <td className="px-4 py-3">{appt.date}</td>
-                <td className="px-4 py-3">{appt.time}</td>
-                <td className="px-4 py-3">
-                  <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800 capitalize">{appt.status}</span>
-                </td>
+        {loading ? (
+          <p className="p-6 text-gray-500 text-sm">Loading appointments...</p>
+        ) : appointments.length === 0 ? (
+          <p className="p-6 text-gray-500 text-sm">No appointments yet. Bookings from the chatbot widget will appear here in real time.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                {['Service', 'User', 'Phone', 'Date', 'Time', 'Channel', 'Status', 'Actions'].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left font-medium text-gray-600">{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {appointments.map((appt) => (
+                <tr key={appt.id} className="border-t border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">{appt.serviceName}</td>
+                  <td className="px-4 py-3">{appt.userName || 'Guest'}</td>
+                  <td className="px-4 py-3">{appt.userPhone || '—'}</td>
+                  <td className="px-4 py-3">{appt.date}</td>
+                  <td className="px-4 py-3">{appt.time}</td>
+                  <td className="px-4 py-3 capitalize">{appt.channel || 'website'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs capitalize ${
+                      appt.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                      appt.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>{appt.status}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {appt.status !== 'cancelled' && (
+                      <Button variant="ghost" onClick={() => handleStatusChange(appt.id, 'cancelled')}>
+                        Cancel
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {showForm && (
