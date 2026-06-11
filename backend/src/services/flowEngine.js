@@ -178,6 +178,7 @@ class FlowEngine {
       channel: freshConv.channel || 'website',
       notes: JSON.stringify(session),
       reminderSent: false,
+      dailyReminderSent: false,
       createdAt: getFieldValue().serverTimestamp(),
       updatedAt: getFieldValue().serverTimestamp(),
     };

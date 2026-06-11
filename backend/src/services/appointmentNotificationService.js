@@ -1,5 +1,5 @@
 const WhatsAppService = require('./whatsappService');
-const { getChannelConfig, getBusiness, logError } = require('../firebase/admin');
+const { getChannelConfig, getBusiness, getDb, logError } = require('../firebase/admin');
 
 function normalizeWhatsAppPhone(phone) {
   if (!phone) return '';
@@ -29,6 +29,28 @@ function buildAdminBookingMessage(businessName, appointment) {
   return lines.filter((line) => line !== null).join('\n');
 }
 
+function buildAdminDailyDigestMessage(businessName, date, appointments) {
+  const lines = [
+    `📋 Today's appointments — ${date}`,
+    businessName ? businessName : null,
+    '',
+  ];
+  if (!appointments.length) {
+    lines.push('No appointments scheduled for today.');
+  } else {
+    appointments
+      .sort((a, b) => `${a.time}`.localeCompare(`${b.time}`))
+      .forEach((appt, index) => {
+        lines.push(
+          `${index + 1}. ${appt.time} — ${appt.serviceName || 'Appointment'} (${appt.userName || 'Guest'})`
+        );
+        if (appt.userPhone) lines.push(`   📞 ${appt.userPhone}`);
+      });
+    lines.push('', `Total: ${appointments.length} appointment(s)`);
+  }
+  return lines.filter((line) => line !== null).join('\n');
+}
+
 async function notifyAdminNewBooking(businessId, appointment) {
   try {
     const config = await getChannelConfig(businessId, 'whatsapp');
@@ -49,8 +71,42 @@ async function notifyAdminNewBooking(businessId, appointment) {
   }
 }
 
+async function notifyAdminDailyDigest(businessId, date, appointments) {
+  try {
+    const config = await getChannelConfig(businessId, 'whatsapp');
+    if (!config?.enabled) return;
+    if (config.dailyAdminDigest === false) return;
+    if (config.lastAdminDigestDate === date) return;
+
+    const adminPhone = normalizeWhatsAppPhone(config.adminNotifyPhone);
+    if (!adminPhone) return;
+
+    const business = await getBusiness(businessId);
+    const wa = new WhatsAppService(businessId);
+    await wa.init();
+    await wa.sendTextMessage(
+      adminPhone,
+      buildAdminDailyDigestMessage(business?.name, date, appointments)
+    );
+
+    await getDb()
+      .collection('businesses')
+      .doc(businessId)
+      .collection('channels')
+      .doc('whatsapp')
+      .set({ lastAdminDigestDate: date }, { merge: true });
+
+    console.log(`[Reminder] Admin daily digest sent for business ${businessId} (${date})`);
+  } catch (error) {
+    console.warn(`[Reminder] Admin daily digest failed: ${error.message}`);
+    await logError(error, businessId).catch(() => {});
+  }
+}
+
 module.exports = {
   notifyAdminNewBooking,
+  notifyAdminDailyDigest,
   normalizeWhatsAppPhone,
   buildAdminBookingMessage,
+  buildAdminDailyDigestMessage,
 };

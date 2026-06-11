@@ -1,6 +1,11 @@
 const express = require('express');
 const { verifyFirebaseToken } = require('../middleware/auth');
 const { getDailyAnalytics, getAnalyticsRange } = require('../controllers/analyticsController');
+const {
+  getWhatsAppConfig,
+  updateWhatsAppConfig,
+  testWhatsAppConfig,
+} = require('../controllers/channelConfigController');
 const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
 const SessionManager = require('../services/sessionManager');
 const { deliverAgentReply } = require('../services/conversationDeliveryService');
@@ -14,6 +19,9 @@ router.get('/api/analytics/daily', verifyFirebaseToken, getDailyAnalytics);
 router.get('/api/analytics/range', verifyFirebaseToken, getAnalyticsRange);
 router.get('/api/ai-config', verifyFirebaseToken, getAIConfig);
 router.put('/api/ai-config', verifyFirebaseToken, updateAIConfig);
+router.get('/api/channels/whatsapp', verifyFirebaseToken, getWhatsAppConfig);
+router.put('/api/channels/whatsapp', verifyFirebaseToken, updateWhatsAppConfig);
+router.post('/api/channels/whatsapp/test', verifyFirebaseToken, testWhatsAppConfig);
 
 router.get('/api/conversations', verifyFirebaseToken, async (req, res) => {
   try {

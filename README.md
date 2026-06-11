@@ -310,7 +310,7 @@ Upgrade in **Admin → Plans** (UPI / Card via Razorpay). When limits are hit, t
 2. **Flow engine** runs booking flows first (appointments, FAQs, handoff)
 3. **AI** (Gemini, multi-key failover) answers questions the flow does not cover
 4. **Appointments** are saved to Firestore; admins see them in real time
-5. **Reminders** cron (every 15 min) sends WhatsApp/Telegram reminders on Pro+ plans
+5. **Reminders** cron (every 15 min, Pro+): customer morning reminder at **8 AM** local, **1 hour before** appointment, and **admin daily digest** on WhatsApp at 8 AM
 
 ## Features
 

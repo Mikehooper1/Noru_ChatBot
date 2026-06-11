@@ -70,19 +70,23 @@ class SessionManager {
   }
 
   static async saveMessage(conversationId, role, content, type = 'text', metadata = {}) {
+    const db = getDb();
     const messageId = uuidv4();
-    await getDb()
-      .collection('conversations')
-      .doc(conversationId)
-      .collection('messages')
-      .doc(messageId)
-      .set({
-        role,
-        content,
-        type,
-        metadata,
-        timestamp: getFieldValue().serverTimestamp(),
-      });
+    const convRef = db.collection('conversations').doc(conversationId);
+
+    await convRef.collection('messages').doc(messageId).set({
+      role,
+      content,
+      type,
+      metadata,
+      timestamp: getFieldValue().serverTimestamp(),
+    });
+
+    await convRef.update({
+      lastMessageAt: getFieldValue().serverTimestamp(),
+      updatedAt: getFieldValue().serverTimestamp(),
+    });
+
     return messageId;
   }
 

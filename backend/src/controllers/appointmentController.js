@@ -31,6 +31,7 @@ async function createAppointment(req, res) {
       notes: data.notes || '',
       googleCalendarEventId: calendarEventId,
       reminderSent: false,
+      dailyReminderSent: false,
       createdAt: getFieldValue().serverTimestamp(),
       updatedAt: getFieldValue().serverTimestamp(),
     };

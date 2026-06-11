@@ -3,11 +3,28 @@ import { collection, query, orderBy, onSnapshot } from '../firebase/firestore';
 import { db } from '../firebase/firestore';
 import { useBusiness } from '../hooks/useBusiness';
 import { useLiveConversations } from '../hooks/useLiveConversations';
+import { formatLastSeen, getActivityStatus } from '../utils/conversationActivity';
 import { api } from '../services/api';
 import { Button } from '../components/shared/Button';
 import { Input } from '../components/shared/Input';
 
-function ConversationPanel({ conversation, onClose }) {
+function ActivityBadge({ conversation, now }) {
+  const activity = conversation.activityStatus || getActivityStatus(conversation, now);
+  const isActive = activity === 'active';
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+        isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+      {isActive ? 'Active' : 'Inactive'}
+    </span>
+  );
+}
+
+function ConversationPanel({ conversation, onClose, now }) {
   const [messages, setMessages] = useState([]);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -52,8 +69,13 @@ function ConversationPanel({ conversation, onClose }) {
     <div className="flex flex-col h-full border-l border-gray-200 bg-white">
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold">{conversation.userName || conversation.userId}</h3>
-          <p className="text-xs text-gray-500 capitalize">{conversation.channel} · {conversation.status}</p>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">{conversation.userName || conversation.userId}</h3>
+            <ActivityBadge conversation={conversation} now={now} />
+          </div>
+          <p className="text-xs text-gray-500 capitalize mt-1">
+            {conversation.channel} · {conversation.status} · {formatLastSeen(conversation, now)}
+          </p>
         </div>
         <div className="flex gap-2">
           {conversation.status === 'handoff' && (
@@ -96,11 +118,18 @@ export default function AgentsPage() {
   const { currentBusiness, businesses } = useBusiness();
   const [tab, setTab] = useState('all');
   const statusFilter = tab === 'handoff' ? 'handoff' : null;
-  const { conversations: allChats } = useLiveConversations(currentBusiness?.id, null);
-  const { conversations, loading } = useLiveConversations(currentBusiness?.id, statusFilter);
+  const activityFilter = tab === 'active' ? 'active' : tab === 'inactive' ? 'inactive' : null;
+  const { conversations: allChats, now } = useLiveConversations(currentBusiness?.id, null);
+  const { conversations, loading } = useLiveConversations(
+    currentBusiness?.id,
+    statusFilter,
+    activityFilter
+  );
   const [selected, setSelected] = useState(null);
 
   const handoffCount = allChats.filter((c) => c.status === 'handoff').length;
+  const activeCount = allChats.filter((c) => getActivityStatus(c, now) === 'active').length;
+  const inactiveCount = allChats.filter((c) => getActivityStatus(c, now) === 'inactive').length;
 
   if (!currentBusiness) {
     return <div className="p-6 text-gray-500">Select a chatbot to manage conversations.</div>;
@@ -108,16 +137,22 @@ export default function AgentsPage() {
 
   return (
     <div className="p-6 h-[calc(100vh-4rem)] flex flex-col">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold">Agent Inbox</h2>
           <p className="text-sm text-gray-500">
-            Manage live chats across {businesses.length} chatbot{businesses.length !== 1 ? 's' : ''} · switch bot in the top bar
+            Live status updates every 30s · Active = message in last 15 minutes
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant={tab === 'all' ? 'primary' : 'secondary'} onClick={() => setTab('all')}>
-            All Chats
+            All ({allChats.length})
+          </Button>
+          <Button variant={tab === 'active' ? 'primary' : 'secondary'} onClick={() => setTab('active')}>
+            Active ({activeCount})
+          </Button>
+          <Button variant={tab === 'inactive' ? 'primary' : 'secondary'} onClick={() => setTab('inactive')}>
+            Inactive ({inactiveCount})
           </Button>
           <Button variant={tab === 'handoff' ? 'primary' : 'secondary'} onClick={() => setTab('handoff')}>
             Needs Attention {handoffCount > 0 && `(${handoffCount})`}
@@ -130,7 +165,7 @@ export default function AgentsPage() {
           {loading ? (
             <p className="p-4 text-gray-500 text-sm">Loading conversations...</p>
           ) : conversations.length === 0 ? (
-            <p className="p-4 text-gray-500 text-sm">No conversations yet for {currentBusiness.name}.</p>
+            <p className="p-4 text-gray-500 text-sm">No conversations in this view.</p>
           ) : (
             conversations.map((conv) => (
               <button
@@ -140,15 +175,19 @@ export default function AgentsPage() {
                   selected?.id === conv.id ? 'bg-primary/5' : ''
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <p className="font-medium text-sm">{conv.userName || conv.userId || 'Visitor'}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium text-sm truncate">{conv.userName || conv.userId || 'Visitor'}</p>
+                  <ActivityBadge conversation={conv} now={now} />
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-gray-500 capitalize">{conv.channel}</p>
                   <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
                     conv.status === 'handoff' ? 'bg-orange-100 text-orange-800' :
-                    conv.status === 'active' ? 'bg-green-100 text-green-800' :
-                    'bg-gray-100 text-gray-600'
+                    conv.status === 'resolved' ? 'bg-gray-100 text-gray-600' :
+                    'bg-blue-50 text-blue-700'
                   }`}>{conv.status}</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-1 capitalize">{conv.channel}</p>
+                <p className="text-xs text-gray-400 mt-1">{formatLastSeen(conv, now)}</p>
               </button>
             ))
           )}
@@ -156,7 +195,7 @@ export default function AgentsPage() {
 
         {selected && (
           <div className="flex-1 min-w-0">
-            <ConversationPanel conversation={selected} onClose={() => setSelected(null)} />
+            <ConversationPanel conversation={selected} onClose={() => setSelected(null)} now={now} />
           </div>
         )}
       </div>

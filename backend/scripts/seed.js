@@ -141,6 +141,7 @@ async function seed() {
           webhookUrl: '',
           adminNotifyPhone: '',
           notifyOnBooking: true,
+          dailyAdminDigest: true,
         }),
         ...(ch === 'telegram' && { botToken: encrypt(''), botUsername: '', webhookUrl: '' }),
         ...(ch === 'instagram' && { accessToken: encrypt(''), pageId: '', enabled: false }),

@@ -138,15 +138,23 @@ function encrypt(text) {
   return `${iv.toString('hex')}:${encrypted}`;
 }
 
+const ENCRYPTED_PATTERN = /^[0-9a-f]{32}:[0-9a-f]+$/i;
+
 function decrypt(encryptedText) {
-  if (!encryptedText || !encryptedText.includes(':')) return encryptedText;
-  const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-key-change-me!!', 'salt', 32);
-  const [ivHex, encrypted] = encryptedText.split(':');
-  const iv = Buffer.from(ivHex, 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
+  if (!encryptedText) return encryptedText;
+  // Plain Meta tokens (EAA...) must not be run through decrypt — only our iv:ciphertext format.
+  if (!ENCRYPTED_PATTERN.test(String(encryptedText))) return encryptedText;
+  try {
+    const key = crypto.scryptSync(process.env.ENCRYPTION_KEY || 'default-key-change-me!!', 'salt', 32);
+    const [ivHex, encrypted] = String(encryptedText).split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch {
+    return encryptedText;
+  }
 }
 
 async function getBusiness(businessId) {

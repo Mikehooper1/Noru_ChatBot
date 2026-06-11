@@ -88,6 +88,12 @@ export const api = {
     request(`/api/ai-config?businessId=${encodeURIComponent(businessId)}`),
   saveAIConfig: (data) =>
     request('/api/ai-config', { method: 'PUT', body: JSON.stringify(data) }),
+  getWhatsAppConfig: (businessId) =>
+    request(`/api/channels/whatsapp?businessId=${encodeURIComponent(businessId)}`),
+  saveWhatsAppConfig: (data) =>
+    request('/api/channels/whatsapp', { method: 'PUT', body: JSON.stringify(data) }),
+  testWhatsAppConfig: (businessId) =>
+    request('/api/channels/whatsapp/test', { method: 'POST', body: JSON.stringify({ businessId }) }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',
