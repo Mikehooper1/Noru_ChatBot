@@ -5,6 +5,7 @@ const { sendSessionWelcome } = require('../services/welcomeService');
 const WhatsAppService = require('../services/whatsappService');
 const {
   sendMessage,
+  answerCallbackQuery,
   buildInlineKeyboard,
   buildPaymentKeyboard,
 } = require('../services/telegramService');
@@ -171,6 +172,10 @@ async function handleWhatsAppWebhook(body) {
 }
 
 async function handleTelegramUpdate(businessId, update) {
+  if (update.callback_query?.id) {
+    await answerCallbackQuery(businessId, update.callback_query.id);
+  }
+
   const message = update.message || update.callback_query?.message;
   const chatId = message?.chat?.id?.toString();
   const userMessage =

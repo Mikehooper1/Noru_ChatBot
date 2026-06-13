@@ -14,6 +14,16 @@ async function getTelegramBot(businessId) {
   return { bot, config };
 }
 
+async function answerCallbackQuery(businessId, callbackQueryId) {
+  const instance = await getTelegramBot(businessId);
+  if (!instance?.bot || !callbackQueryId) return;
+  try {
+    await instance.bot.answerCallbackQuery(callbackQueryId);
+  } catch (error) {
+    console.warn('[Telegram] answerCallbackQuery failed:', error.message);
+  }
+}
+
 async function sendMessage(businessId, chatId, text, inlineKeyboard = null) {
   const instance = await getTelegramBot(businessId);
   if (!instance) throw new Error('Telegram not configured');
@@ -70,6 +80,7 @@ function buildPaymentKeyboard(paymentLinks) {
 module.exports = {
   getTelegramBot,
   sendMessage,
+  answerCallbackQuery,
   sendBookingConfirmation,
   setupWebhook,
   buildInlineKeyboard,

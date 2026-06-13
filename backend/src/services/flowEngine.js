@@ -5,9 +5,11 @@ const { sanitizeInput } = require('../utils/sanitize');
 const { trackEvent } = require('./analyticsService');
 const {
   resolveSessionKey,
+  detectBookIntent,
   detectRecallIntent,
   detectModifyIntent,
   detectCancelIntent,
+  getRecallQuickReplies,
   isValidDate,
   normalizeTime,
   fetchUserRecords,
@@ -433,6 +435,19 @@ class FlowEngine {
       return { reply: null, action: 'handoff_active' };
     }
 
+    if (detectBookIntent(sanitized)) {
+      let bookFlow = this.matchFlow(sanitized, flows);
+      if (!bookFlow) {
+        bookFlow = flows.find((f) => textsMatch(sanitized, f.name) || textsMatch(sanitized, f.trigger));
+      }
+      if (bookFlow) {
+        await SessionManager.updateConversation(this.conversationId, {
+          sessionData: { ...session, modifyMode: null, lastAction: null, recalledRecordIds: [] },
+        });
+        return this.startFlow(bookFlow);
+      }
+    }
+
     if (session.modifyMode || detectModifyIntent(sanitized) || detectCancelIntent(sanitized)) {
       const modifyResult = await handleModifyRequest({
         message: sanitized,
@@ -460,7 +475,7 @@ class FlowEngine {
       });
       return {
         reply: formatRecallResponse(records, businessType),
-        quickReplies: ['Change date', 'Change time'],
+        quickReplies: getRecallQuickReplies(records, businessType),
         action: 'recall',
       };
     }

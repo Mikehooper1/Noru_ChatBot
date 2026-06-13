@@ -1,6 +1,6 @@
 const SessionManager = require('./sessionManager');
 const { getBusiness } = require('../firebase/admin');
-const { fetchUserRecords, formatRecallResponse } = require('./conversationActionService');
+const { fetchUserRecords, formatRecallResponse, getRecallQuickReplies } = require('./conversationActionService');
 const { trackEvent } = require('./analyticsService');
 
 const RECALL_CONFIG = {
@@ -75,7 +75,7 @@ async function buildSessionWelcome({ conversation, businessId, flowQuickReplies 
     if (!quickReplies.includes(label)) quickReplies.push(label);
   }
   if (records.length) {
-    for (const label of ['Change date', 'Change time']) {
+    for (const label of getRecallQuickReplies(records, business?.type)) {
       if (!quickReplies.includes(label)) quickReplies.push(label);
     }
   }

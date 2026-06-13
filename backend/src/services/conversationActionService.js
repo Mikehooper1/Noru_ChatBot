@@ -6,7 +6,10 @@ const { notifyAdminNewBooking } = require('./appointmentNotificationService');
 const ACTION_REGEX = /ACTION:(BOOK_APPOINTMENT|CREATE_ORDER|UPDATE_APPOINTMENT|CANCEL_APPOINTMENT)\|(\{[^}]+\})/gi;
 
 const RECALL_PATTERN =
-  /\b(my\s+)?(appointment|appointments|booking|bookings|order|orders|delivery|deliveries)\b|\b(track|recall|remember|show|check|view|see|lookup|find)\b.*\b(appointment|booking|order|delivery)\b|\bwhat('s| is)\s+my\b|\b(track my order|my deliveries|my bookings)\b/i;
+  /\bmy\s+(appointments?|bookings?|orders?|deliveries)\b|\b(show|view|check|see|find|lookup|track|recall|list)\s+(my\s+)?(appointments?|bookings?|orders?|deliveries?)\b|\bwhat('s| is)\s+my\s+(appointment|booking|order)\b|\b(track my order|my deliveries|my bookings|my appointments)\b/i;
+
+const BOOK_INTENT_PATTERN =
+  /^book appointment$|\b(book|booking|schedule|reserve|make|create|set up|need|want)\b.*\b(appointment|appointments|booking|visit|consultation|slot)\b|\bnew\b.*\b(appointment|booking)\b/i;
 
 const MODIFY_PATTERN =
   /\b(change|modify|update|reschedule|move|switch|edit|adjust)\b.*\b(time|date|appointment|booking|order|service|slot)\b|\b(change|modify|update|reschedule|move)\b.*\b(to|at)\b|\b(need to|want to)\s+(change|modify|reschedule|update)\b/i;
@@ -74,9 +77,24 @@ function isTimeOnlyInput(message) {
   return /^\d{1,2}(:\d{2})?$/.test(trimmed);
 }
 
+function detectBookIntent(message) {
+  return BOOK_INTENT_PATTERN.test((message || '').trim());
+}
+
 function detectRecallIntent(message) {
-  if (detectModifyIntent(message) || detectCancelIntent(message)) return false;
+  if (detectModifyIntent(message) || detectCancelIntent(message) || detectBookIntent(message)) {
+    return false;
+  }
   return RECALL_PATTERN.test(message || '');
+}
+
+function getRecallQuickReplies(records = [], businessType = '') {
+  if (records.length > 0) {
+    return ['Change date', 'Change time'];
+  }
+  const type = (businessType || '').toLowerCase();
+  if (type === 'ecommerce') return ['Book appointment', 'Order support'];
+  return ['Book appointment'];
 }
 
 function normalizeTime(time) {
@@ -178,10 +196,15 @@ async function handleModifyRequest({ message, conv, businessId, businessType, co
 
   const target = await getTargetRecord(businessId, conv, session);
   if (!target) {
+    await updateSession(conversationId, {
+      currentFlowId: null,
+      currentStepId: null,
+      sessionData: { ...session, modifyMode: null, lastAction: null, recalledRecordIds: [] },
+    });
     return {
-      reply: 'I could not find an existing booking to update. Would you like to book a new appointment?',
+      reply: 'You don\'t have any appointments to update yet. Would you like to book one?',
       quickReplies: ['Book appointment'],
-      action: 'modify',
+      action: 'no_booking_to_modify',
     };
   }
 
@@ -282,10 +305,15 @@ async function startModifyPrompt({
   const target = existingTarget || (await getTargetRecord(businessId, conv, session));
 
   if (!target) {
+    await updateSession(conversationId, {
+      currentFlowId: null,
+      currentStepId: null,
+      sessionData: { ...session, modifyMode: null, lastAction: null, recalledRecordIds: [] },
+    });
     return {
-      reply: 'I could not find an existing booking to update. Would you like to book a new appointment?',
+      reply: 'You don\'t have any appointments to update yet. Would you like to book one?',
       quickReplies: ['Book appointment'],
-      action: 'modify',
+      action: 'no_booking_to_modify',
     };
   }
 
@@ -606,9 +634,11 @@ async function saveFlowOrder(conv, flow, session) {
 
 module.exports = {
   resolveSessionKey,
+  detectBookIntent,
   detectRecallIntent,
   detectModifyIntent,
   detectCancelIntent,
+  getRecallQuickReplies,
   parseModifyFields,
   isTimeOnlyInput,
   isValidDate,
