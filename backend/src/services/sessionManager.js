@@ -70,18 +70,31 @@ class SessionManager {
       });
   }
 
+  static cleanMetadata(metadata = {}) {
+    if (!metadata || typeof metadata !== 'object') return {};
+    return Object.fromEntries(
+      Object.entries(metadata).filter(([, value]) => value !== undefined)
+    );
+  }
+
   static async saveMessage(conversationId, role, content, type = 'text', metadata = {}) {
     const db = getDb();
     const messageId = uuidv4();
     const convRef = db.collection('conversations').doc(conversationId);
+    const cleanMetadata = SessionManager.cleanMetadata(metadata);
 
-    await convRef.collection('messages').doc(messageId).set({
+    const payload = {
       role,
       content,
       type,
-      metadata,
       timestamp: getFieldValue().serverTimestamp(),
-    });
+    };
+
+    if (Object.keys(cleanMetadata).length > 0) {
+      payload.metadata = cleanMetadata;
+    }
+
+    await convRef.collection('messages').doc(messageId).set(payload);
 
     await convRef.update({
       lastMessageAt: getFieldValue().serverTimestamp(),

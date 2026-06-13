@@ -84,7 +84,7 @@ async function processIncomingMessage({ businessId, channel, userId, userMessage
 
     if (reply) {
       await SessionManager.saveMessage(conversation.id, 'bot', reply, 'text', {
-        quickReplies: result.quickReplies,
+        quickReplies: result.quickReplies || [],
       });
       await trackEvent(businessId, channel, 'message_sent');
     }
