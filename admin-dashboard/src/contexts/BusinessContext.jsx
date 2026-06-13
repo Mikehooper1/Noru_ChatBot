@@ -13,6 +13,13 @@ import { useAuth } from './AuthContext';
 
 const BusinessContext = createContext(null);
 
+async function fetchAllBusinesses() {
+  const snap = await getDocs(collection(db, 'businesses'));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+}
+
 async function fetchBusinessesForUser(userId) {
   const map = new Map();
 
@@ -34,7 +41,7 @@ async function fetchBusinessesForUser(userId) {
 }
 
 export function BusinessProvider({ children }) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [businesses, setBusinesses] = useState([]);
   const [currentBusiness, setCurrentBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -47,10 +54,10 @@ export function BusinessProvider({ children }) {
       return;
     }
 
-    let unsubOwned = null;
+    let unsub = null;
 
     const load = async () => {
-      const all = await fetchBusinessesForUser(user.uid);
+      const all = isAdmin ? await fetchAllBusinesses() : await fetchBusinessesForUser(user.uid);
       setBusinesses(all);
       setCurrentBusiness((prev) => {
         if (prev && all.some((b) => b.id === prev.id)) return prev;
@@ -66,13 +73,16 @@ export function BusinessProvider({ children }) {
 
     load();
 
-    const ownedQuery = query(collection(db, 'businesses'), where('ownerId', '==', user.uid));
-    unsubOwned = onSnapshot(ownedQuery, () => load());
+    // Admins watch the whole collection; businesses watch only what they own.
+    const watchQuery = isAdmin
+      ? collection(db, 'businesses')
+      : query(collection(db, 'businesses'), where('ownerId', '==', user.uid));
+    unsub = onSnapshot(watchQuery, () => load(), () => setLoading(false));
 
     return () => {
-      if (unsubOwned) unsubOwned();
+      if (unsub) unsub();
     };
-  }, [user]);
+  }, [user, isAdmin]);
 
   const selectBusiness = (business) => {
     setCurrentBusiness(business);

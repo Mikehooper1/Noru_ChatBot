@@ -11,7 +11,7 @@ function initials(email) {
 }
 
 export default function TopBar() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { businesses, currentBusiness, setCurrentBusiness } = useBusiness();
 
   return (
@@ -50,6 +50,11 @@ export default function TopBar() {
       </div>
 
       <div className="flex items-center gap-3">
+        {isAdmin && (
+          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ink text-white text-[11px] font-semibold uppercase tracking-wide">
+            Admin
+          </span>
+        )}
         <div className="hidden sm:flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-brand-gradient text-white text-xs font-semibold flex items-center justify-center">
             {initials(user?.email)}

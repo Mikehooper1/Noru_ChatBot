@@ -2,6 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // The single platform admin is identified by users/{uid}.role == 'admin'.
+    // This flag can ONLY be set via the Admin SDK (set-admin script), never by
+    // the client, because the rules below forbid self-promotion.
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'business') == 'admin';
+    }
+
     function isBusinessAdmin(businessId) {
       let biz = get(/databases/$(database)/documents/businesses/$(businessId)).data;
       return request.auth != null && (
@@ -11,13 +19,26 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, write: if request.auth.uid == uid;
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+
+      // A self-registering business may only create their own profile as a
+      // 'business'. They can never create themselves as 'admin'.
+      allow create: if request.auth.uid == uid &&
+        request.resource.data.get('role', 'business') == 'business';
+
+      // Users may update their own profile but cannot change their role
+      // (only the Admin SDK can elevate someone to 'admin').
+      allow update: if request.auth.uid == uid &&
+        request.resource.data.get('role', 'business') == resource.data.get('role', 'business');
+
+      allow update, read: if isAdmin();
     }
 
     match /businesses/{businessId} {
       allow read: if request.auth != null && (
         resource.data.ownerId == request.auth.uid ||
-        request.auth.uid in resource.data.get('adminIds', [])
+        request.auth.uid in resource.data.get('adminIds', []) ||
+        isAdmin()
       );
 
       allow create: if request.auth != null &&
@@ -26,11 +47,12 @@ service cloud.firestore {
 
       allow update, delete: if request.auth != null && (
         resource.data.ownerId == request.auth.uid ||
-        request.auth.uid in resource.data.get('adminIds', [])
+        request.auth.uid in resource.data.get('adminIds', []) ||
+        isAdmin()
       );
 
       match /{subcollection}/{docId} {
-        allow read, write: if isBusinessAdmin(businessId);
+        allow read, write: if isBusinessAdmin(businessId) || isAdmin();
       }
     }
 

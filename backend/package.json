@@ -8,6 +8,7 @@
     "prestart": "node scripts/copy-widget.js",
     "start": "node src/app.js",
     "seed": "node scripts/seed.js",
+    "set-admin": "node scripts/set-admin.js",
     "copy-widget": "node scripts/copy-widget.js",
     "test:firebase": "node scripts/test-firebase-key.js"
   },

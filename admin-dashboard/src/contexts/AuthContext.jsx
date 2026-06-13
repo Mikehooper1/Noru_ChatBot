@@ -16,10 +16,13 @@ export function AuthProvider({ children }) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         const profileDoc = await getDoc(userRef);
         if (!profileDoc.exists()) {
+          // Self-registered accounts are ALWAYS 'business'. The single platform
+          // admin is granted the 'admin' role out-of-band via the set-admin
+          // script (Admin SDK). Clients can never create an admin profile.
           await setDoc(userRef, {
             email: firebaseUser.email,
             displayName: firebaseUser.displayName || '',
-            role: 'admin',
+            role: 'business',
             businessIds: [],
             createdAt: serverTimestamp(),
             lastLoginAt: serverTimestamp(),
@@ -37,8 +40,11 @@ export function AuthProvider({ children }) {
     return unsub;
   }, []);
 
+  const role = userProfile?.role || 'business';
+  const isAdmin = role === 'admin';
+
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading }}>
+    <AuthContext.Provider value={{ user, userProfile, role, isAdmin, loading }}>
       {children}
     </AuthContext.Provider>
   );

@@ -9,7 +9,7 @@ import { Input, Select } from '../components/shared/Input';
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 export default function BusinessesPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { businesses, currentBusiness, setCurrentBusiness } = useBusiness();
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -181,9 +181,11 @@ export default function BusinessesPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">My Chatbots</h2>
+          <h2 className="text-2xl font-bold">{isAdmin ? 'All Businesses' : 'My Chatbots'}</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {businesses.length} chatbot{businesses.length !== 1 ? 's' : ''}
+            {isAdmin
+              ? `${businesses.length} business${businesses.length !== 1 ? 'es' : ''} across the platform`
+              : `${businesses.length} chatbot${businesses.length !== 1 ? 's' : ''}`}
           </p>
         </div>
         <Button onClick={() => { setShowForm(true); setError(''); }}>
@@ -206,7 +208,7 @@ export default function BusinessesPage() {
               <h3 className="font-semibold">{biz.name}</h3>
               <div className="flex items-center gap-2">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{biz.plan || 'free'}</span>
-                {biz.ownerId === user?.uid && (
+                {(biz.ownerId === user?.uid || isAdmin) && (
                   <button
                     id={`delete-chatbot-${biz.id}`}
                     title="Delete chatbot"
