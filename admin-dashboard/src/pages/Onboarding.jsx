@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, setDoc, db } from '../firebase/firestore';
+import { doc, setDoc, serverTimestamp, db } from '../firebase/firestore';
 import { logout } from '../firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useBusiness } from '../hooks/useBusiness';
@@ -24,9 +24,16 @@ function loadRazorpayScript() {
 }
 
 export default function Onboarding() {
-  const { user } = useAuth();
-  const { setCurrentBusiness } = useBusiness();
+  const { user, userProfile, refreshUserProfile } = useAuth();
+  const { businesses, loading: bizLoading, setCurrentBusiness } = useBusiness();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (bizLoading) return;
+    if (businesses.length > 0 || userProfile?.onboardingComplete) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [bizLoading, businesses.length, userProfile?.onboardingComplete, navigate]);
 
   const [step, setStep] = useState(0);
   const [error, setError] = useState('');
@@ -84,19 +91,19 @@ export default function Onboarding() {
     }
   };
 
-  const runPayment = async (businessId) => {
+  const runPayment = async () => {
     if (selectedPlan === 'free') return;
     setStatusMsg('Opening secure checkout...');
-    const order = await api.createPaymentOrder(businessId, selectedPlan);
+    const order = await api.createPaymentOrder(selectedPlan);
 
     if (order.mock || order.keyId === 'mock_key') {
       await api.verifyPayment({
         orderId: order.orderId,
         paymentId: `mock_pay_${Date.now()}`,
         signature: 'mock',
-        businessId,
         planId: selectedPlan,
       });
+      await refreshUserProfile();
       return;
     }
 
@@ -115,9 +122,9 @@ export default function Onboarding() {
               orderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
               signature: response.razorpay_signature,
-              businessId,
               planId: selectedPlan,
             });
+            await refreshUserProfile();
             resolve();
           } catch (err) {
             reject(err);
@@ -154,10 +161,20 @@ export default function Onboarding() {
         console.error('Channel token save failed:', err);
       });
 
-      await runPayment(created.id);
+      await runPayment();
 
       setStatusMsg('Finishing up...');
-      setCurrentBusiness({ ...created, plan: selectedPlan });
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          plan: selectedPlan,
+          onboardingComplete: true,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      await refreshUserProfile();
+      setCurrentBusiness(created);
       navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.');
@@ -166,6 +183,14 @@ export default function Onboarding() {
       setStatusMsg('');
     }
   };
+
+  if (bizLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-subtle">
+        <div className="w-10 h-10 rounded-xl bg-brand-gradient animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-surface-subtle">

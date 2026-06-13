@@ -11,7 +11,7 @@ function initials(email) {
 }
 
 export default function TopBar() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, userPlan } = useAuth();
   const { businesses, currentBusiness, setCurrentBusiness } = useBusiness();
 
   return (
@@ -43,7 +43,7 @@ export default function TopBar() {
         {currentBusiness && (
           <Link to="/plans">
             <Badge color="primary" className="capitalize hover:opacity-80">
-              {currentBusiness.plan || 'free'} plan
+              {userPlan || 'free'} plan
             </Badge>
           </Link>
         )}

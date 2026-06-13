@@ -1,16 +1,18 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { collection, doc, setDoc, deleteDoc, getDocs, writeBatch, serverTimestamp } from '../firebase/firestore';
 import { db } from '../firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useBusiness } from '../hooks/useBusiness';
+import { canCreateAgent, getAgentLimit } from '../constants/plans';
 import { Button } from '../components/shared/Button';
 import { Input, Select } from '../components/shared/Input';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
 
 export default function BusinessesPage() {
-  const { user, isAdmin } = useAuth();
-  const { businesses, currentBusiness, setCurrentBusiness } = useBusiness();
+  const { user, isAdmin, userPlan } = useAuth();
+  const { businesses, currentBusiness, setCurrentBusiness, ownedCount } = useBusiness();
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
@@ -81,6 +83,11 @@ export default function BusinessesPage() {
 
   const createBusiness = async () => {
     if (!user || !form.name.trim()) return;
+
+    if (!isAdmin && !canCreateAgent(userPlan, ownedCount, isAdmin)) {
+      setError(`Your ${userPlan} plan allows up to ${getAgentLimit(userPlan)} AI agent(s). Upgrade in Plans to create more.`);
+      return;
+    }
 
     setCreating(true);
     setError('');
@@ -177,6 +184,9 @@ export default function BusinessesPage() {
     }
   };
 
+  const atAgentLimit = !isAdmin && !canCreateAgent(userPlan, ownedCount, isAdmin);
+  const agentLimit = getAgentLimit(userPlan);
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -185,13 +195,26 @@ export default function BusinessesPage() {
           <p className="text-sm text-gray-500 mt-1">
             {isAdmin
               ? `${businesses.length} business${businesses.length !== 1 ? 'es' : ''} across the platform`
-              : `${businesses.length} chatbot${businesses.length !== 1 ? 's' : ''}`}
+              : `${ownedCount} of ${agentLimit} AI agent${agentLimit !== 1 ? 's' : ''} on ${userPlan} plan`}
           </p>
         </div>
-        <Button onClick={() => { setShowForm(true); setError(''); }}>
-          + New Chatbot
-        </Button>
+        {atAgentLimit ? (
+          <Link to="/plans">
+            <Button variant="secondary">Upgrade to add agents</Button>
+          </Link>
+        ) : (
+          <Button onClick={() => { setShowForm(true); setError(''); }}>
+            + New Chatbot
+          </Button>
+        )}
       </div>
+
+      {atAgentLimit && (
+        <div className="mb-4 p-3 bg-amber-50 text-amber-900 rounded-lg text-sm">
+          You&apos;ve reached the {agentLimit}-agent limit on your {userPlan} plan.{' '}
+          <Link to="/plans" className="font-medium underline">Upgrade your plan</Link> to create more.
+        </div>
+      )}
 
 
 
@@ -207,7 +230,7 @@ export default function BusinessesPage() {
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold">{biz.name}</h3>
               <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{biz.plan || 'free'}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize">{biz.type}</span>
                 {(biz.ownerId === user?.uid || isAdmin) && (
                   <button
                     id={`delete-chatbot-${biz.id}`}

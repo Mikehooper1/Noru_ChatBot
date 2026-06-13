@@ -1,13 +1,26 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthChange } from '../firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, db } from '../firebase/firestore';
 
 const AuthContext = createContext(null);
 
+async function loadUserProfile(uid) {
+  const userRef = doc(db, 'users', uid);
+  const profileDoc = await getDoc(userRef);
+  return profileDoc.exists() ? profileDoc.data() : null;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshUserProfile = useCallback(async () => {
+    if (!user?.uid) return null;
+    const profile = await loadUserProfile(user.uid);
+    setUserProfile(profile);
+    return profile;
+  }, [user?.uid]);
 
   useEffect(() => {
     const unsub = onAuthChange(async (firebaseUser) => {
@@ -16,14 +29,13 @@ export function AuthProvider({ children }) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         const profileDoc = await getDoc(userRef);
         if (!profileDoc.exists()) {
-          // Self-registered accounts are ALWAYS 'business'. The single platform
-          // admin is granted the 'admin' role out-of-band via the set-admin
-          // script (Admin SDK). Clients can never create an admin profile.
           await setDoc(userRef, {
             email: firebaseUser.email,
             displayName: firebaseUser.displayName || '',
             role: 'business',
+            plan: 'free',
             businessIds: [],
+            onboardingComplete: false,
             createdAt: serverTimestamp(),
             lastLoginAt: serverTimestamp(),
           });
@@ -42,9 +54,12 @@ export function AuthProvider({ children }) {
 
   const role = userProfile?.role || 'business';
   const isAdmin = role === 'admin';
+  const userPlan = userProfile?.plan || 'free';
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, role, isAdmin, loading }}>
+    <AuthContext.Provider
+      value={{ user, userProfile, role, isAdmin, userPlan, loading, refreshUserProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

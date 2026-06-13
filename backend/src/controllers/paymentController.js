@@ -3,6 +3,7 @@ const {
   createRazorpayOrder,
   verifyAndActivate,
   activateMockPayment,
+  activatePlan,
   isRazorpayConfigured,
   PLANS,
 } = require('../services/paymentService');
@@ -12,16 +13,23 @@ const { getPlan } = require('../constants/plans');
 
 async function createOrder(req, res) {
   try {
-    const { businessId, planId } = req.body;
-    if (!businessId || !planId || !PLANS[planId]) {
-      return res.status(400).json({ error: 'businessId and valid planId required' });
+    const userId = req.user.uid;
+    const { planId, businessId } = req.body;
+    if (!planId || !PLANS[planId]) {
+      return res.status(400).json({ error: 'Valid planId required' });
     }
 
-    const business = await getBusiness(businessId);
-    if (!business) return res.status(404).json({ error: 'Business not found' });
+    if (businessId) {
+      const business = await getBusiness(businessId);
+      if (!business) return res.status(404).json({ error: 'Business not found' });
+      if (business.ownerId !== userId) {
+        return res.status(403).json({ error: 'Not authorized for this business' });
+      }
+    }
 
     const order = await createRazorpayOrder({
-      businessId,
+      userId,
+      businessId: businessId || null,
       planId,
       userEmail: req.user?.email,
     });
@@ -34,18 +42,19 @@ async function createOrder(req, res) {
 
 async function verifyPayment(req, res) {
   try {
-    const { orderId, paymentId, signature, businessId, planId } = req.body;
+    const userId = req.user.uid;
+    const { orderId, paymentId, signature, planId } = req.body;
 
-    if (!businessId || !planId) {
+    if (!planId) {
       return res.status(400).json({ error: 'Missing payment details' });
     }
 
     if (orderId?.startsWith('order_mock_') || !isRazorpayConfigured()) {
-      const result = await activateMockPayment(businessId, planId);
+      const result = await activateMockPayment(userId, planId);
       return res.json(result);
     }
 
-    const result = await verifyAndActivate({ orderId, paymentId, signature, businessId, planId });
+    const result = await verifyAndActivate({ orderId, paymentId, signature, userId, planId });
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -97,13 +106,15 @@ async function verifyPublicPayment(req, res) {
     let result;
 
     if (payload.orderId.startsWith('order_mock_') || !isRazorpayConfigured()) {
-      result = await activateMockPayment(payload.businessId, payload.planId);
+      result = await activatePlan(payload.businessId, payload.planId);
     } else {
+      const business = await getBusiness(payload.businessId);
+      if (!business?.ownerId) return res.status(404).json({ error: 'Business owner not found' });
       result = await verifyAndActivate({
         orderId: payload.orderId,
         paymentId,
         signature,
-        businessId: payload.businessId,
+        userId: business.ownerId,
         planId: payload.planId,
       });
     }

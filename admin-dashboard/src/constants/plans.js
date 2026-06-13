@@ -23,12 +23,12 @@ export const PLANS = {
     price: 999,
     priceLabel: '₹999 / month',
     pricePaise: 99900,
-    businesses: 3,
+    businesses: 2,
     channels: ['website', 'whatsapp', 'telegram'],
     sessionRetention: '30 days',
     reminders: true,
     features: [
-      '3 AI chatbot agents',
+      '2 AI chatbot agents',
       'WhatsApp + Telegram',
       '30-day chat memory',
       'Auto appointment reminders',
@@ -42,12 +42,12 @@ export const PLANS = {
     price: 2999,
     priceLabel: '₹2,999 / month',
     pricePaise: 299900,
-    businesses: 99,
+    businesses: 5,
     channels: ['website', 'whatsapp', 'telegram', 'instagram'],
     sessionRetention: '30 days',
     reminders: true,
     features: [
-      'Unlimited AI agents',
+      '5 AI chatbot agents',
       'WhatsApp + Telegram + Instagram',
       '30-day chat memory',
       'Priority reminders',
@@ -63,4 +63,13 @@ export function getPlanLimit(planId) {
 
 export function channelAllowed(planId, channel) {
   return getPlanLimit(planId).channels.includes(channel);
+}
+
+export function getAgentLimit(planId) {
+  return getPlanLimit(planId).businesses;
+}
+
+export function canCreateAgent(planId, ownedCount, isAdmin = false) {
+  if (isAdmin) return true;
+  return ownedCount < getAgentLimit(planId);
 }

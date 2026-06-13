@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { createRazorpayOrder } = require('./paymentService');
 const { getPlan } = require('../constants/plans');
+const { getBusiness } = require('../firebase/admin');
 
 const SECRET =
   process.env.CHECKOUT_SECRET ||
@@ -42,7 +43,14 @@ async function createCheckoutLink(businessId, planId) {
     throw new Error('Invalid plan for checkout');
   }
 
-  const order = await createRazorpayOrder({ businessId, planId });
+  const business = await getBusiness(businessId);
+  if (!business?.ownerId) throw new Error('Business owner not found');
+
+  const order = await createRazorpayOrder({
+    userId: business.ownerId,
+    businessId,
+    planId,
+  });
   const payload = {
     businessId,
     planId,

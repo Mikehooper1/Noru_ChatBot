@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from '../firebase/firestore';
 import { db } from '../firebase/firestore';
 import { useBusiness } from '../hooks/useBusiness';
+import { useAuth } from '../contexts/AuthContext';
 import ChannelToggle from '../components/channels/ChannelToggle';
 
 const channels = [
@@ -12,6 +13,7 @@ const channels = [
 ];
 
 export default function ChannelsPage() {
+  const { userPlan } = useAuth();
   const { currentBusiness } = useBusiness();
   const [configs, setConfigs] = useState({});
 
@@ -35,7 +37,7 @@ export default function ChannelsPage() {
             businessId={currentBusiness?.id}
             channel={ch.id}
             config={configs[ch.id]}
-            plan={currentBusiness?.plan || 'free'}
+            plan={userPlan || 'free'}
             label={ch.label}
             icon={ch.icon}
           />

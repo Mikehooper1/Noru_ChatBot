@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const axios = require('axios');
-const { getDb, getFieldValue } = require('../firebase/admin');
+const { getDb, getFieldValue, getBusiness } = require('../firebase/admin');
 const { getPlan, PLANS } = require('../constants/plans');
 
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
@@ -10,7 +10,7 @@ function isRazorpayConfigured() {
   return !!(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET);
 }
 
-async function createRazorpayOrder({ businessId, planId, userEmail }) {
+async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
   const plan = getPlan(planId);
   if (!plan || plan.pricePaise <= 0) {
     throw new Error('Invalid plan for payment');
@@ -19,14 +19,15 @@ async function createRazorpayOrder({ businessId, planId, userEmail }) {
   const orderData = {
     amount: plan.pricePaise,
     currency: 'INR',
-    receipt: `noru_${businessId}_${planId}_${Date.now()}`,
-    notes: { businessId, planId, userEmail: userEmail || '' },
+    receipt: `noru_${userId || businessId}_${planId}_${Date.now()}`,
+    notes: { userId: userId || '', businessId: businessId || '', planId, userEmail: userEmail || '' },
   };
 
   if (!isRazorpayConfigured()) {
     const mockOrderId = `order_mock_${Date.now()}`;
     await getDb().collection('payments').doc(mockOrderId).set({
-      businessId,
+      userId: userId || null,
+      businessId: businessId || null,
       planId,
       amount: plan.pricePaise,
       currency: 'INR',
@@ -50,7 +51,8 @@ async function createRazorpayOrder({ businessId, planId, userEmail }) {
   });
 
   await getDb().collection('payments').doc(response.data.id).set({
-    businessId,
+    userId: userId || null,
+    businessId: businessId || null,
     planId,
     amount: plan.pricePaise,
     currency: 'INR',
@@ -80,16 +82,21 @@ function verifyRazorpaySignature(orderId, paymentId, signature) {
   return expected === signature;
 }
 
-async function activatePlan(businessId, planId, paymentDetails = {}) {
+async function activatePlanForUser(userId, planId, paymentDetails = {}) {
+  if (!userId) throw new Error('User ID required to activate plan');
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 30);
 
-  await getDb().collection('businesses').doc(businessId).update({
-    plan: planId,
-    planExpiresAt: expiresAt,
-    planUpdatedAt: getFieldValue().serverTimestamp(),
-    lastPayment: paymentDetails,
-  });
+  await getDb().collection('users').doc(userId).set(
+    {
+      plan: planId,
+      planExpiresAt: expiresAt,
+      planUpdatedAt: getFieldValue().serverTimestamp(),
+      lastPayment: paymentDetails,
+    },
+    { merge: true }
+  );
 
   if (paymentDetails.orderId) {
     await getDb().collection('payments').doc(paymentDetails.orderId).set(
@@ -103,17 +110,24 @@ async function activatePlan(businessId, planId, paymentDetails = {}) {
   }
 }
 
-async function verifyAndActivate({ orderId, paymentId, signature, businessId, planId }) {
+/** @deprecated Use activatePlanForUser — kept for chat checkout links keyed by businessId */
+async function activatePlan(businessId, planId, paymentDetails = {}) {
+  const business = await getBusiness(businessId);
+  if (!business?.ownerId) throw new Error('Business owner not found');
+  await activatePlanForUser(business.ownerId, planId, paymentDetails);
+}
+
+async function verifyAndActivate({ orderId, paymentId, signature, userId, planId }) {
   if (!verifyRazorpaySignature(orderId, paymentId, signature)) {
     throw new Error('Payment verification failed');
   }
 
-  await activatePlan(businessId, planId, { orderId, paymentId, signature });
+  await activatePlanForUser(userId, planId, { orderId, paymentId, signature });
   return { success: true, plan: planId, expiresInDays: 30 };
 }
 
-async function activateMockPayment(businessId, planId) {
-  await activatePlan(businessId, planId, { orderId: `mock_${Date.now()}`, mock: true });
+async function activateMockPayment(userId, planId) {
+  await activatePlanForUser(userId, planId, { orderId: `mock_${Date.now()}`, mock: true });
   return { success: true, plan: planId, expiresInDays: 30, mock: true };
 }
 
@@ -124,4 +138,5 @@ module.exports = {
   verifyAndActivate,
   activateMockPayment,
   activatePlan,
+  activatePlanForUser,
 };

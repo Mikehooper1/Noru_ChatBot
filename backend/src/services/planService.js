@@ -30,18 +30,35 @@ async function incrementUsage(businessId, field = 'messages') {
   );
 }
 
-function isPlanExpired(business) {
-  if (!business.planExpiresAt) return false;
-  const expires = business.planExpiresAt.toDate
-    ? business.planExpiresAt.toDate()
-    : new Date(business.planExpiresAt);
+function isPlanExpired(profile) {
+  if (!profile?.planExpiresAt) return false;
+  const expires = profile.planExpiresAt.toDate
+    ? profile.planExpiresAt.toDate()
+    : new Date(profile.planExpiresAt);
   return expires < new Date();
+}
+
+async function getUserPlan(userId) {
+  if (!userId) return 'free';
+  const doc = await getDb().collection('users').doc(userId).get();
+  if (!doc.exists) return 'free';
+  const data = doc.data();
+  const planId = data.plan || 'free';
+  if (planId !== 'free' && isPlanExpired(data)) return 'free';
+  return planId;
 }
 
 function getEffectivePlan(business) {
   const planId = business?.plan || 'free';
   if (planId !== 'free' && isPlanExpired(business)) return 'free';
   return planId;
+}
+
+async function getEffectivePlanForBusiness(business) {
+  if (business?.ownerId) {
+    return getUserPlan(business.ownerId);
+  }
+  return getEffectivePlan(business);
 }
 
 function isConversationExpired(conversation, plan) {
@@ -94,7 +111,7 @@ async function checkPlanAccess(businessId, channel) {
   const business = await getBusiness(businessId);
   if (!business) return { allowed: false, reason: 'Business not found' };
 
-  const planId = getEffectivePlan(business);
+  const planId = await getEffectivePlanForBusiness(business);
   const plan = getPlan(planId);
   const usage = await getUsage(businessId);
 
@@ -130,7 +147,7 @@ async function checkPlanAccess(businessId, channel) {
 
 async function checkRemindersAllowed(businessId) {
   const business = await getBusiness(businessId);
-  const plan = getPlan(getEffectivePlan(business));
+  const plan = getPlan(await getEffectivePlanForBusiness(business));
   return plan.reminders === true;
 }
 
@@ -138,6 +155,8 @@ module.exports = {
   PLANS,
   getPlan,
   getEffectivePlan,
+  getEffectivePlanForBusiness,
+  getUserPlan,
   getUsage,
   incrementUsage,
   isConversationExpired,

@@ -30,15 +30,19 @@ function FullScreenLoader({ label = 'Loading your workspace…' }) {
 }
 
 function ProtectedLayout({ children }) {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, userProfile } = useAuth();
   const { businesses, loading: bizLoading } = useBusiness();
 
   if (loading) return <FullScreenLoader />;
   if (!user) return <Navigate to="/" replace />;
   if (bizLoading) return <FullScreenLoader />;
 
-  // A business with no chatbot yet must finish onboarding first.
-  if (!isAdmin && businesses.length === 0) {
+  // Only brand-new accounts with no agents yet need onboarding.
+  if (
+    !isAdmin &&
+    businesses.length === 0 &&
+    !userProfile?.onboardingComplete
+  ) {
     return <Navigate to="/onboarding" replace />;
   }
 

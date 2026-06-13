@@ -7,6 +7,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
 } from '../firebase/firestore';
 import { db } from '../firebase/firestore';
 import { useAuth } from './AuthContext';
@@ -41,7 +42,7 @@ async function fetchBusinessesForUser(userId) {
 }
 
 export function BusinessProvider({ children }) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, refreshUserProfile } = useAuth();
   const [businesses, setBusinesses] = useState([]);
   const [currentBusiness, setCurrentBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,30 +55,59 @@ export function BusinessProvider({ children }) {
       return;
     }
 
+    // Reset loading when user changes so we don't redirect to onboarding
+    // while the async fetch is still in flight (businesses would be []).
+    setLoading(true);
+
     let unsub = null;
 
     const load = async () => {
-      const all = isAdmin ? await fetchAllBusinesses() : await fetchBusinessesForUser(user.uid);
-      setBusinesses(all);
-      setCurrentBusiness((prev) => {
-        if (prev && all.some((b) => b.id === prev.id)) return prev;
-        const saved = localStorage.getItem(`noru_current_business_${user.uid}`);
-        if (saved) {
-          const found = all.find((b) => b.id === saved);
-          if (found) return found;
+      try {
+        const all = isAdmin ? await fetchAllBusinesses() : await fetchBusinessesForUser(user.uid);
+        setBusinesses(all);
+        setCurrentBusiness((prev) => {
+          if (prev && all.some((b) => b.id === prev.id)) return prev;
+          const saved = localStorage.getItem(`noru_current_business_${user.uid}`);
+          if (saved) {
+            const found = all.find((b) => b.id === saved);
+            if (found) return found;
+          }
+          return all[0] || null;
+        });
+
+        // Existing accounts created before onboarding flag — mark complete.
+        if (!isAdmin && all.length > 0) {
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
+          const userData = userSnap.exists() ? userSnap.data() : {};
+          const patch = { onboardingComplete: true };
+          if (!userData.plan) {
+            const legacyPlan = all.reduce((best, b) => {
+              const order = { free: 0, pro: 1, enterprise: 2 };
+              return (order[b.plan] || 0) > (order[best] || 0) ? b.plan : best;
+            }, 'free');
+            patch.plan = legacyPlan;
+          }
+          setDoc(userRef, patch, { merge: true })
+            .then(() => refreshUserProfile?.())
+            .catch(() => {});
         }
-        return all[0] || null;
-      });
-      setLoading(false);
+      } catch (err) {
+        console.error('Failed to load businesses:', err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     load();
 
-    // Admins watch the whole collection; businesses watch only what they own.
     const watchQuery = isAdmin
       ? collection(db, 'businesses')
       : query(collection(db, 'businesses'), where('ownerId', '==', user.uid));
-    unsub = onSnapshot(watchQuery, () => load(), () => setLoading(false));
+    unsub = onSnapshot(watchQuery, () => load(), (err) => {
+      console.error('Business snapshot error:', err);
+      setLoading(false);
+    });
 
     return () => {
       if (unsub) unsub();
@@ -91,9 +121,19 @@ export function BusinessProvider({ children }) {
     }
   };
 
+  const ownedCount = user
+    ? businesses.filter((b) => b.ownerId === user.uid).length
+    : 0;
+
   return (
     <BusinessContext.Provider
-      value={{ businesses, currentBusiness, setCurrentBusiness: selectBusiness, loading }}
+      value={{
+        businesses,
+        currentBusiness,
+        setCurrentBusiness: selectBusiness,
+        ownedCount,
+        loading,
+      }}
     >
       {children}
     </BusinessContext.Provider>

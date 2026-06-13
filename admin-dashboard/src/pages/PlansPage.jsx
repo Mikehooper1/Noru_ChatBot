@@ -3,7 +3,7 @@ import { doc, updateDoc, serverTimestamp } from '../firebase/firestore';
 import { db } from '../firebase/firestore';
 import { useBusiness } from '../hooks/useBusiness';
 import { useAuth } from '../contexts/AuthContext';
-import { PLANS } from '../constants/plans';
+import { PLANS, getAgentLimit } from '../constants/plans';
 import { Button } from '../components/shared/Button';
 import UpgradeChat from '../components/plans/UpgradeChat';
 import { api } from '../services/api';
@@ -22,30 +22,31 @@ function loadRazorpayScript() {
 }
 
 export default function PlansPage() {
-  const { user } = useAuth();
-  const { currentBusiness, businesses } = useBusiness();
+  const { user, userPlan, userProfile, refreshUserProfile } = useAuth();
+  const { ownedCount } = useBusiness();
   const [paying, setPaying] = useState(null);
   const [message, setMessage] = useState('');
 
-  const currentPlan = currentBusiness?.plan || 'free';
+  const currentPlan = userPlan || 'free';
+  const agentLimit = getAgentLimit(currentPlan);
 
   const startPayment = async (planId) => {
-    if (!currentBusiness?.id || planId === 'free') return;
+    if (planId === 'free') return;
     setPaying(planId);
     setMessage('');
 
     try {
-      const order = await api.createPaymentOrder(currentBusiness.id, planId);
+      const order = await api.createPaymentOrder(planId);
 
       if (order.mock || order.keyId === 'mock_key') {
         await api.verifyPayment({
           orderId: order.orderId,
           paymentId: `mock_pay_${Date.now()}`,
           signature: 'mock',
-          businessId: currentBusiness.id,
           planId,
         });
-        setMessage(`✅ ${PLANS[planId].name} activated for ${currentBusiness.name}! Valid for 30 days.`);
+        await refreshUserProfile();
+        setMessage(`✅ ${PLANS[planId].name} plan activated! Valid for 30 days. You can create up to ${PLANS[planId].businesses} AI agents.`);
         setPaying(null);
         return;
       }
@@ -57,7 +58,7 @@ export default function PlansPage() {
         amount: order.amount,
         currency: order.currency,
         name: 'Noru ChatBot',
-        description: `${order.planName} Plan — ${currentBusiness.name}`,
+        description: `${order.planName} Plan`,
         order_id: order.orderId,
         handler: async (response) => {
           try {
@@ -65,16 +66,16 @@ export default function PlansPage() {
               orderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
               signature: response.razorpay_signature,
-              businessId: currentBusiness.id,
               planId,
             });
+            await refreshUserProfile();
             setMessage(`✅ Payment successful! ${PLANS[planId].name} plan activated for 30 days.`);
           } catch (err) {
             setMessage(`Payment verification failed: ${err.message}`);
           }
           setPaying(null);
         },
-        prefill: { email: user?.email || '', name: currentBusiness.name },
+        prefill: { email: user?.email || '' },
         theme: { color: '#4F46E5' },
         method: { upi: true, card: true, netbanking: true },
       });
@@ -92,13 +93,14 @@ export default function PlansPage() {
   };
 
   const downgradeToFree = async () => {
-    if (!currentBusiness?.id) return;
-    await updateDoc(doc(db, 'businesses', currentBusiness.id), {
+    if (!user?.uid) return;
+    await updateDoc(doc(db, 'users', user.uid), {
       plan: 'free',
       planExpiresAt: null,
       planUpdatedAt: serverTimestamp(),
     });
-    setMessage(`Downgraded ${currentBusiness.name} to Free plan.`);
+    await refreshUserProfile();
+    setMessage('Downgraded to Free plan. You can keep 1 AI agent with 24-hour chat memory.');
   };
 
   return (
@@ -106,14 +108,15 @@ export default function PlansPage() {
       <div className="mb-8">
         <h2 className="text-2xl font-bold">Plans & Billing</h2>
         <p className="text-gray-500 mt-1">
-          AI agent for <strong>{currentBusiness?.name || 'your chatbot'}</strong> —{' '}
-          <span className="text-primary font-semibold capitalize">{currentPlan}</span> plan
+          Your account is on the{' '}
+          <span className="text-primary font-semibold capitalize">{currentPlan}</span> plan —{' '}
+          {ownedCount} of {agentLimit} AI agent{agentLimit !== 1 ? 's' : ''} in use
         </p>
-        {currentBusiness?.planExpiresAt && (
+        {userProfile?.planExpiresAt && (
           <p className="text-xs text-gray-400 mt-1">
             Expires:{' '}
-            {(currentBusiness.planExpiresAt.toDate?.() ||
-              new Date((currentBusiness.planExpiresAt.seconds || 0) * 1000)
+            {(userProfile.planExpiresAt.toDate?.() ||
+              new Date((userProfile.planExpiresAt.seconds || 0) * 1000)
             ).toLocaleDateString()}
           </p>
         )}

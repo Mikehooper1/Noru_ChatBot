@@ -81,10 +81,10 @@ export const api = {
   deleteConversation: (id) =>
     request(`/api/conversations/${id}`, { method: 'DELETE' }),
   getPlans: () => fetch(`${BASE_URL}/api/plans`).then(parseJsonSafe),
-  createPaymentOrder: (businessId, planId) =>
+  createPaymentOrder: (planId) =>
     request('/api/payments/create-order', {
       method: 'POST',
-      body: JSON.stringify({ businessId, planId }),
+      body: JSON.stringify({ planId }),
     }),
   verifyPayment: (data) =>
     request('/api/payments/verify', { method: 'POST', body: JSON.stringify(data) }),
