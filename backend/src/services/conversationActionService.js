@@ -244,7 +244,7 @@ async function handleModifyRequest({ message, conv, businessId, businessType, co
   }
 
   if (fields.date && !isValidDate(fields.date)) {
-    return { reply: 'Please provide a valid date in YYYY-MM-DD format (e.g. 2026-06-26).', action: 'modify' };
+    return { reply: 'Please provide a valid date in DD-MM-YYYY format (e.g. 2026-06-26).', action: 'modify' };
   }
 
   if (fields.time || fields.date) {
@@ -340,7 +340,7 @@ async function startModifyPrompt({
 
   if (pending === 'date') {
     return {
-      reply: `Your ${modifyMode.serviceName} appointment is on ${modifyMode.date}. What date would you prefer? (YYYY-MM-DD)`,
+      reply: `Your ${modifyMode.serviceName} appointment is on ${modifyMode.date}. What date would you prefer? (DD-MM-YYYY)`,
       action: 'modify',
     };
   }
@@ -364,7 +364,7 @@ async function handleModifyFollowUp({ message, conv, businessId, businessType, c
   if (pending === 'date' || (!pending && fields.date && !fields.time)) {
     const date = fields.date || (isValidDate(text) ? text : null);
     if (!date) {
-      return { reply: 'Please enter a valid date in YYYY-MM-DD format (e.g. 2026-06-26).', action: 'modify' };
+      return { reply: 'Please enter a valid date in DD-MM-YYYY format (e.g. 2026-06-26).', action: 'modify' };
     }
     const updated = await updateAppointmentRecord(mode.appointmentId, { date });
     await updateSession(conversationId, {
@@ -389,7 +389,7 @@ async function handleModifyFollowUp({ message, conv, businessId, businessType, c
     mode.pending = 'date';
     await updateSession(conversationId, { sessionData: { ...session, modifyMode: mode } });
     return {
-      reply: `What date would you prefer for your ${mode.serviceName} appointment? (YYYY-MM-DD)`,
+      reply: `What date would you prefer for your ${mode.serviceName} appointment? (DD-MM-YYYY)`,
       action: 'modify',
     };
   }
@@ -404,7 +404,7 @@ async function handleModifyFollowUp({ message, conv, businessId, businessType, c
   }
 
   return {
-    reply: `Please tell me the new date (YYYY-MM-DD) or time (e.g. 14:30) for your ${mode.serviceName} appointment.`,
+    reply: `Please tell me the new date (DD-MM-YYYY) or time (e.g. 14:30) for your ${mode.serviceName} appointment.`,
     quickReplies: ['Change date', 'Change time'],
     action: 'modify',
   };

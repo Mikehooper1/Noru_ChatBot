@@ -148,7 +148,7 @@ export default function BusinessesPage() {
           order: 1,
           steps: [
             { id: 's1', type: 'message', message: `Welcome to ${name}! How can we help?`, quickReplies: ['Book appointment', 'Talk to agent'], inputType: null, nextStepId: 's2', conditions: [{ if: 'Talk to agent', goto: 's3' }] },
-            { id: 's2', type: 'question', message: 'What date works for you? (YYYY-MM-DD)', quickReplies: [], inputType: 'date', nextStepId: 's4', conditions: [] },
+            { id: 's2', type: 'question', message: 'What date works for you? (DD-MM-YYYY)', quickReplies: [], inputType: 'date', nextStepId: 's4', conditions: [] },
             { id: 's3', type: 'handoff', message: 'Connecting you to an agent...', quickReplies: [], inputType: null, nextStepId: null, conditions: [] },
             { id: 's4', type: 'question', message: 'What time? (e.g. 14:00)', quickReplies: [], inputType: 'text', nextStepId: 's5', conditions: [] },
             { id: 's5', type: 'booking', message: 'Booking your appointment!', quickReplies: [], inputType: null, nextStepId: null, conditions: [] },

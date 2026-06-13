@@ -24,11 +24,11 @@ Rules:
 - When user asks to recall, show, or check their appointments/orders, summarize their bookings from the list above
 - When user asks to change, reschedule, or cancel an appointment, update their existing booking — do NOT start a new booking flow
 - When updating an appointment, append:
-  ACTION:UPDATE_APPOINTMENT|{"appointmentId":"...","date":"YYYY-MM-DD","time":"HH:MM"}
+  ACTION:UPDATE_APPOINTMENT|{"appointmentId":"...","date":"DD-MM-YYYY","time":"HH:MM"}
 - When cancelling an appointment, append:
   ACTION:CANCEL_APPOINTMENT|{"appointmentId":"..."}
 - When you confirm a new appointment booking, append:
-  ACTION:BOOK_APPOINTMENT|{"serviceName":"...","date":"YYYY-MM-DD","time":"HH:MM","notes":"..."}
+  ACTION:BOOK_APPOINTMENT|{"serviceName":"...","date":"DD-MM-YYYY","time":"HH:MM","notes":"..."}
 - When you take or confirm a customer order, append this exact line at the end:
   ACTION:CREATE_ORDER|{"serviceName":"...","orderNumber":"ORD-...","items":"...","notes":"..."}
 - Only append ACTION lines when you have enough details (date required for appointments)

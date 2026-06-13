@@ -21,7 +21,7 @@ const businesses = [
       trigger: 'book',
       steps: [
         { id: 's1', type: 'message', message: 'Welcome to HealthCare Clinic! Which department do you need?', quickReplies: ['General', 'Dental', 'Lab'], inputType: null, nextStepId: 's2', conditions: [] },
-        { id: 's2', type: 'question', message: 'Great choice! What date works for you? (YYYY-MM-DD)', quickReplies: [], inputType: 'date', nextStepId: 's3', conditions: [] },
+        { id: 's2', type: 'question', message: 'Great choice! What date works for you? (DD-MM-YYYY)', quickReplies: [], inputType: 'date', nextStepId: 's3', conditions: [] },
         { id: 's3', type: 'question', message: 'What time would you prefer? (e.g. 14:00)', quickReplies: [], inputType: 'text', nextStepId: 's4', conditions: [] },
         { id: 's4', type: 'booking', message: 'Perfect! I am booking your appointment now.', quickReplies: [], inputType: null, nextStepId: null, conditions: [] },
       ],
@@ -45,7 +45,7 @@ const businesses = [
       steps: [
         { id: 's1', type: 'message', message: 'Which service would you like?', quickReplies: ['Haircut', 'Facial', 'Manicure'], inputType: null, nextStepId: 's2', conditions: [] },
         { id: 's2', type: 'question', message: 'Do you have a preferred stylist? (or type "any")', quickReplies: ['Any stylist'], inputType: 'text', nextStepId: 's3', conditions: [] },
-        { id: 's3', type: 'question', message: 'What date works for you? (YYYY-MM-DD)', quickReplies: [], inputType: 'date', nextStepId: 's4', conditions: [] },
+        { id: 's3', type: 'question', message: 'What date works for you? (DD-MM-YYYY)', quickReplies: [], inputType: 'date', nextStepId: 's4', conditions: [] },
         { id: 's4', type: 'question', message: 'What time would you prefer? (e.g. 14:00)', quickReplies: [], inputType: 'text', nextStepId: 's5', conditions: [] },
         { id: 's5', type: 'booking', message: 'Booking your salon appointment!', quickReplies: [], inputType: null, nextStepId: null, conditions: [] },
       ],

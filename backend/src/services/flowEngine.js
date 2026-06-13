@@ -178,7 +178,7 @@ class FlowEngine {
 
     if (!date) {
       return {
-        reply: step.message || 'Let me confirm your booking details. What date works for you? (YYYY-MM-DD)',
+        reply: step.message || 'Let me confirm your booking details. What date works for you? (DD-MM-YYYY)',
         quickReplies: [],
         action: null,
       };
@@ -186,7 +186,7 @@ class FlowEngine {
 
     if (!isValidDate(date)) {
       return {
-        reply: 'Please enter a valid date in YYYY-MM-DD format (e.g. 2026-06-15).',
+        reply: 'Please enter a valid date in DD-MM-YYYY format (e.g. 2026-06-15).',
         quickReplies: [],
         action: null,
       };
@@ -317,13 +317,13 @@ class FlowEngine {
       if (sessionKey === 'date' && !isValidDate(sanitizedInput)) {
         if (isTimeOnlyInput(sanitizedInput)) {
           return {
-            reply: 'That looks like a time. Say "change time to 14:30" to update your appointment, or enter a date as YYYY-MM-DD.',
+            reply: 'That looks like a time. Say "change time to 14:30" to update your appointment, or enter a date as DD-MM-YYYY.',
             quickReplies: ['Change time'],
             action: null,
           };
         }
         return {
-          reply: 'Please enter a valid date in YYYY-MM-DD format (e.g. 2026-06-15).',
+          reply: 'Please enter a valid date in DD-MM-YYYY format (e.g. 2026-06-15).',
           quickReplies: currentStep.quickReplies || [],
           action: null,
         };
