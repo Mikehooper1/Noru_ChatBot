@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const FlowEngine = require('../services/flowEngine');
 const SessionManager = require('../services/sessionManager');
+const { sendSessionWelcome } = require('../services/welcomeService');
 const WhatsAppService = require('../services/whatsappService');
 const {
   sendMessage,
@@ -24,16 +25,6 @@ async function buildWelcomeMessage(conversation, businessId) {
   if (name && name !== 'Visitor') {
     return `Hi ${name}! ${welcome}`;
   }
-  return welcome;
-}
-
-async function sendWelcomeIfNeeded(conversation, businessId) {
-  if (conversation.welcomeSent) return null;
-
-  const welcome = await buildWelcomeMessage(conversation, businessId);
-  await SessionManager.saveMessage(conversation.id, 'bot', welcome);
-  await SessionManager.updateConversation(conversation.id, { welcomeSent: true });
-  await trackEvent(businessId, conversation.channel || 'website', 'message_sent');
   return welcome;
 }
 
@@ -71,7 +62,10 @@ async function processIncomingMessage({ businessId, channel, userId, userMessage
 
     let welcomeMessage = null;
     if (!skipWelcome && !conversation.welcomeSent) {
-      welcomeMessage = await sendWelcomeIfNeeded(conversation, businessId);
+      welcomeMessage = await buildWelcomeMessage(conversation, businessId);
+      await SessionManager.saveMessage(conversation.id, 'bot', welcomeMessage);
+      await SessionManager.updateConversation(conversation.id, { welcomeSent: true });
+      await trackEvent(businessId, channel, 'message_sent');
       conversation.welcomeSent = true;
     }
 
@@ -244,18 +238,20 @@ async function handleWidgetStart({ businessId, sessionId, userName, userPhone })
     );
   }
 
-  const welcome = await sendWelcomeIfNeeded(conversation, businessId);
-
   const engine = new FlowEngine(businessId, conversation.id);
   const flows = await engine.loadFlows();
-  const quickReplies = engine.buildFlowMenu(flows);
+  const flowQuickReplies = engine.buildFlowMenu(flows);
+
+  const session = await sendSessionWelcome(conversation, businessId, flowQuickReplies);
 
   return {
     sessionId: userId,
     conversationId: conversation.id,
-    welcome,
-    quickReplies,
-    action: welcome ? 'welcome_sent' : null,
+    welcome: session.welcome,
+    recallPrompt: session.recallPrompt,
+    existingRecords: session.existingRecords,
+    quickReplies: session.quickReplies,
+    action: 'welcome_sent',
   };
 }
 

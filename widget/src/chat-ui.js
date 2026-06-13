@@ -173,6 +173,16 @@ export class ChatUI {
     this.inputArea.style.display = 'flex';
   }
 
+  clearMessages() {
+    this.messagesEl.innerHTML = '';
+    this.quickRepliesEl.innerHTML = '';
+    this.seenMessageIds.clear();
+    if (this.typingEl) {
+      this.typingEl.remove();
+      this.typingEl = null;
+    }
+  }
+
   handleSend() {
     const text = this.input.value.trim();
     if (!text || !this.onSend) return;

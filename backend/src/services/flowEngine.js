@@ -400,8 +400,9 @@ class FlowEngine {
 
     if (detectRecallIntent(sanitized)) {
       const records = await fetchUserRecords(this.businessId, conv);
+      const businessType = business?.type || '';
       return {
-        reply: formatRecallResponse(records),
+        reply: formatRecallResponse(records, businessType),
         quickReplies: [],
         action: 'recall',
       };

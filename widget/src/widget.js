@@ -156,8 +156,10 @@ function initWidget() {
     };
   }
 
-  async function startChatSession() {
-    if (!chatUI) return;
+  async function startChatSession({ fresh = false } = {}) {
+    if (!chatUI?.introComplete) return;
+    if (fresh) chatUI.clearMessages();
+
     try {
       const res = await fetch(`${backendUrl}/api/widget/start`, {
         method: 'POST',
@@ -175,10 +177,10 @@ function initWidget() {
         localStorage.setItem(convStorageKey, conversationId);
       }
 
-      if (data.welcome) {
-        chatUI.addMessage(data.welcome, 'bot');
-        chatUI.showQuickReplies(data.quickReplies);
-      }
+      if (data.welcome) chatUI.addMessage(data.welcome, 'bot');
+      if (data.recallPrompt) chatUI.addMessage(data.recallPrompt, 'bot');
+      if (data.existingRecords) chatUI.addMessage(data.existingRecords, 'bot');
+      chatUI.showQuickReplies(data.quickReplies);
     } catch {
       const fallback = widgetConfig?.welcomeMessage || 'Hello! How can I help you today?';
       chatUI.addMessage(userName ? `Hi ${userName}! ${fallback}` : fallback, 'bot');
@@ -240,6 +242,10 @@ function initWidget() {
       if (open) {
         startPolling();
         pollAgentMessages();
+        if (chatUI.introComplete) {
+          startChatSession({ fresh: true });
+          chatUI.input.focus();
+        }
       } else {
         stopPolling();
       }
@@ -249,7 +255,6 @@ function initWidget() {
 
     if (savedUser?.name && savedUser?.phone) {
       chatUI.setIntroComplete(savedUser.name, savedUser.phone);
-      startChatSession();
     }
 
     chatUI.onIntroComplete = (userData) => {
@@ -261,7 +266,7 @@ function initWidget() {
         phone: userData.phone,
       }));
 
-      startChatSession();
+      startChatSession({ fresh: true });
     };
   });
 }

@@ -6,7 +6,7 @@ const { notifyAdminNewBooking } = require('./appointmentNotificationService');
 const ACTION_REGEX = /ACTION:(BOOK_APPOINTMENT|CREATE_ORDER)\|(\{[^}]+\})/gi;
 
 const RECALL_PATTERN =
-  /\b(my\s+)?(appointment|appointments|booking|bookings|order|orders)\b|\b(recall|remember|show|check|view|see|lookup|find)\b.*\b(appointment|booking|order)\b|\bwhat('s| is)\s+my\b/i;
+  /\b(my\s+)?(appointment|appointments|booking|bookings|order|orders|delivery|deliveries)\b|\b(track|recall|remember|show|check|view|see|lookup|find)\b.*\b(appointment|booking|order|delivery)\b|\bwhat('s| is)\s+my\b|\b(track my order|my deliveries|my bookings)\b/i;
 
 function resolveSessionKey(step) {
   if (step.sessionKey) return step.sessionKey;
@@ -67,19 +67,43 @@ async function fetchUserRecords(businessId, conv) {
   return records.slice(0, 10);
 }
 
-function formatRecallResponse(records) {
+function recordLabel(r, businessType) {
+  if (r.recordType === 'order') {
+    return businessType === 'ecommerce' ? 'Order / Delivery' : 'Order';
+  }
+  return businessType === 'clinic' ? 'Appointment' : businessType === 'salon' ? 'Booking' : 'Appointment';
+}
+
+function formatRecallResponse(records, businessType = '') {
+  const type = (businessType || '').toLowerCase();
+
   if (!records.length) {
-    return 'I could not find any appointments or orders linked to your account. If you recently booked, please share your phone number or booking details.';
+    if (type === 'ecommerce') {
+      return 'I could not find any orders or deliveries linked to your phone number. Share your order number if you have one.';
+    }
+    if (type === 'clinic' || type === 'salon') {
+      return 'I could not find any appointments linked to your account. Would you like to book one now?';
+    }
+    return 'I could not find any bookings or orders linked to your account. If you recently booked, please share your phone number.';
   }
 
   const lines = records.map((r) => {
-    const type = r.recordType === 'order' ? 'Order' : 'Appointment';
-    const label = r.serviceName || r.orderNumber || type;
+    const label = recordLabel(r, type);
+    const name = r.serviceName || r.orderNumber || label;
     const when = r.date ? `${r.date}${r.time ? ` at ${r.time}` : ''}` : 'Pending schedule';
-    return `• ${type}: ${label} — ${when} (${r.status || 'confirmed'})`;
+    return `• ${label}: ${name} — ${when} (${r.status || 'confirmed'})`;
   });
 
-  return `Here are your recent bookings:\n\n${lines.join('\n')}\n\nNeed to change anything? Just let me know!`;
+  const header =
+    type === 'ecommerce'
+      ? 'Here are your recent orders & deliveries:'
+      : type === 'clinic'
+        ? 'Here are your appointments:'
+        : type === 'salon'
+          ? 'Here are your salon bookings:'
+          : 'Here are your recent bookings:';
+
+  return `${header}\n\n${lines.join('\n')}\n\nNeed to change anything? Just let me know!`;
 }
 
 async function createAppointmentRecord({
@@ -254,6 +278,7 @@ module.exports = {
   normalizeTime,
   fetchUserRecords,
   formatRecallResponse,
+  recordLabel,
   createAppointmentRecord,
   createOrderRecord,
   parseAIActions,
