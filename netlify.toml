@@ -1,0 +1,11 @@
+# Admin dashboard (React SPA) — deploy from repo root on Netlify
+[build]
+  base = "admin-dashboard"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+# SPA fallback: React Router paths must serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
