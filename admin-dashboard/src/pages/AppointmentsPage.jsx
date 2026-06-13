@@ -36,8 +36,12 @@ export default function AppointmentsPage() {
   };
 
   const exportCSV = () => {
-    const headers = ['Service', 'User', 'Phone', 'Date', 'Time', 'Status', 'Channel'];
-    const rows = appointments.map((a) => [a.serviceName, a.userName, a.userPhone, a.date, a.time, a.status, a.channel]);
+    const headers = ['Type', 'Service', 'User', 'Phone', 'Date', 'Time', 'Status', 'Channel'];
+    const rows = appointments.map((a) => [
+      a.recordType === 'order' ? 'Order' : 'Appointment',
+      a.recordType === 'order' ? (a.orderNumber || a.serviceName) : a.serviceName,
+      a.userName, a.userPhone, a.date, a.time, a.status, a.channel,
+    ]);
     const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -55,7 +59,7 @@ export default function AppointmentsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Appointments</h2>
+          <h2 className="text-2xl font-bold">Appointments & Orders</h2>
           <p className="text-sm text-gray-500 mt-1">
             Live updates for <strong>{currentBusiness.name}</strong> · {appointments.length} total
           </p>
@@ -89,12 +93,12 @@ export default function AppointmentsPage() {
         {loading ? (
           <p className="p-6 text-gray-500 text-sm">Loading appointments...</p>
         ) : appointments.length === 0 ? (
-          <p className="p-6 text-gray-500 text-sm">No appointments yet. Bookings from the chatbot widget will appear here in real time.</p>
+          <p className="p-6 text-gray-500 text-sm">No appointments or orders yet. Bookings from the chatbot will appear here in real time.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Service', 'User', 'Phone', 'Date', 'Time', 'Channel', 'Status', 'Actions'].map((h) => (
+                {['Type', 'Service / Order', 'User', 'Phone', 'Date', 'Time', 'Channel', 'Status', 'Actions'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium text-gray-600">{h}</th>
                 ))}
               </tr>
@@ -102,7 +106,12 @@ export default function AppointmentsPage() {
             <tbody>
               {appointments.map((appt) => (
                 <tr key={appt.id} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-3">{appt.serviceName}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded-full text-xs capitalize ${
+                      appt.recordType === 'order' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                    }`}>{appt.recordType === 'order' ? 'Order' : 'Appointment'}</span>
+                  </td>
+                  <td className="px-4 py-3">{appt.recordType === 'order' ? (appt.orderNumber || appt.serviceName) : appt.serviceName}</td>
                   <td className="px-4 py-3">{appt.userName || 'Guest'}</td>
                   <td className="px-4 py-3">{appt.userPhone || '—'}</td>
                   <td className="px-4 py-3">{appt.date}</td>

@@ -96,6 +96,7 @@ function initWidget() {
   shadow.appendChild(style);
 
   let chatUI;
+  let widgetConfig;
   let userName = savedUser?.name || '';
   let userPhone = savedUser?.phone || '';
   let pollTimer = null;
@@ -155,6 +156,35 @@ function initWidget() {
     };
   }
 
+  async function startChatSession() {
+    if (!chatUI) return;
+    try {
+      const res = await fetch(`${backendUrl}/api/widget/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, sessionId, userName, userPhone }),
+      });
+      const data = await res.json();
+
+      if (data.sessionId) {
+        sessionId = data.sessionId;
+        localStorage.setItem(storageKey, sessionId);
+      }
+      if (data.conversationId) {
+        conversationId = data.conversationId;
+        localStorage.setItem(convStorageKey, conversationId);
+      }
+
+      if (data.welcome) {
+        chatUI.addMessage(data.welcome, 'bot');
+        chatUI.showQuickReplies(data.quickReplies);
+      }
+    } catch {
+      const fallback = widgetConfig?.welcomeMessage || 'Hello! How can I help you today?';
+      chatUI.addMessage(userName ? `Hi ${userName}! ${fallback}` : fallback, 'bot');
+    }
+  }
+
   async function sendMessage(message) {
     if (!chatUI) return;
     chatUI.showTyping();
@@ -196,13 +226,14 @@ function initWidget() {
     }
   }
 
-  loadConfig().then((widgetConfig) => {
+  loadConfig().then((cfg) => {
+    widgetConfig = cfg;
     if (widgetConfig.enabled === false) {
       host.remove();
       return;
     }
 
-    chatUI = new ChatUI(shadow, { ...config, ...widgetConfig });
+    chatUI = new ChatUI(shadow, { ...config, ...cfg });
     chatUI.render();
     chatUI.onSend = sendMessage;
     chatUI.onVisibilityChange = (open) => {
@@ -216,21 +247,21 @@ function initWidget() {
 
     startPolling();
 
-    // If user already provided info previously, skip intro
     if (savedUser?.name && savedUser?.phone) {
       chatUI.setIntroComplete(savedUser.name, savedUser.phone);
+      startChatSession();
     }
 
-    // When intro form is completed
     chatUI.onIntroComplete = (userData) => {
       userName = userData.name;
       userPhone = userData.phone;
 
-      // Persist user info so they don't have to fill it again
       localStorage.setItem(userStorageKey, JSON.stringify({
         name: userData.name,
         phone: userData.phone,
       }));
+
+      startChatSession();
     };
   });
 }

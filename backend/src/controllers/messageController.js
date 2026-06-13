@@ -8,7 +8,7 @@ const {
   buildPaymentKeyboard,
 } = require('../services/telegramService');
 const { trackEvent } = require('../services/analyticsService');
-const { getBusinessByPhoneNumberId, logError } = require('../firebase/admin');
+const { getBusinessByPhoneNumberId, getBusiness, logError } = require('../firebase/admin');
 const { sanitizeInput } = require('../utils/sanitize');
 const {
   checkPlanAccess,
@@ -17,7 +17,27 @@ const {
   getPlan,
 } = require('../services/planService');
 
-async function processIncomingMessage({ businessId, channel, userId, userMessage, userData = {} }) {
+async function buildWelcomeMessage(conversation, businessId) {
+  const business = await getBusiness(businessId);
+  const welcome = business?.welcomeMessage || 'Hello! How can I help you today?';
+  const name = conversation.userName;
+  if (name && name !== 'Visitor') {
+    return `Hi ${name}! ${welcome}`;
+  }
+  return welcome;
+}
+
+async function sendWelcomeIfNeeded(conversation, businessId) {
+  if (conversation.welcomeSent) return null;
+
+  const welcome = await buildWelcomeMessage(conversation, businessId);
+  await SessionManager.saveMessage(conversation.id, 'bot', welcome);
+  await SessionManager.updateConversation(conversation.id, { welcomeSent: true });
+  await trackEvent(businessId, conversation.channel || 'website', 'message_sent');
+  return welcome;
+}
+
+async function processIncomingMessage({ businessId, channel, userId, userMessage, userData = {}, skipWelcome = false }) {
   try {
     const planCheck = await checkPlanAccess(businessId, channel);
     if (!planCheck.allowed) {
@@ -49,6 +69,12 @@ async function processIncomingMessage({ businessId, channel, userId, userMessage
       );
     }
 
+    let welcomeMessage = null;
+    if (!skipWelcome && !conversation.welcomeSent) {
+      welcomeMessage = await sendWelcomeIfNeeded(conversation, businessId);
+      conversation.welcomeSent = true;
+    }
+
     await SessionManager.saveMessage(conversation.id, 'user', userMessage);
     await incrementUsage(businessId, 'messages');
     await trackEvent(businessId, channel, 'message_received');
@@ -60,8 +86,10 @@ async function processIncomingMessage({ businessId, channel, userId, userMessage
       return { conversationId: conversation.id, reply: null, action: 'handoff_active' };
     }
 
-    if (result.reply) {
-      await SessionManager.saveMessage(conversation.id, 'bot', result.reply, 'text', {
+    const reply = result.reply;
+
+    if (reply) {
+      await SessionManager.saveMessage(conversation.id, 'bot', reply, 'text', {
         quickReplies: result.quickReplies,
       });
       await trackEvent(businessId, channel, 'message_sent');
@@ -73,7 +101,8 @@ async function processIncomingMessage({ businessId, channel, userId, userMessage
 
     return {
       conversationId: conversation.id,
-      reply: result.reply,
+      reply,
+      welcome: welcomeMessage,
       quickReplies: result.quickReplies || [],
       action: result.action,
     };
@@ -109,10 +138,16 @@ async function handleWhatsAppWebhook(body) {
         userData: { phone: from, name: userName },
       });
 
-      if (!result.reply) return;
+      if (!result.reply && !result.welcome) return;
 
       const wa = new WhatsAppService(business.id);
       await wa.init();
+
+      if (result.welcome) {
+        await wa.sendTextMessage(from, result.welcome);
+      }
+
+      if (!result.reply) return;
 
       if (result.action === 'upgrade_required' && result.paymentLinks?.length) {
         const primary = result.paymentLinks[0];
@@ -164,6 +199,10 @@ async function handleTelegramUpdate(businessId, update) {
     userData,
   });
 
+  if (result.welcome) {
+    await sendMessage(businessId, chatId, result.welcome);
+  }
+
   if (result.reply) {
     const keyboard =
       result.action === 'upgrade_required' && result.paymentLinks?.length
@@ -171,6 +210,53 @@ async function handleTelegramUpdate(businessId, update) {
         : buildInlineKeyboard(result.quickReplies);
     await sendMessage(businessId, chatId, result.reply, keyboard);
   }
+}
+
+async function handleWidgetStart({ businessId, sessionId, userName, userPhone }) {
+  const userId = sessionId || uuidv4();
+
+  const planCheck = await checkPlanAccess(businessId, 'website');
+  if (!planCheck.allowed) {
+    return {
+      sessionId: userId,
+      conversationId: null,
+      welcome: planCheck.reply,
+      quickReplies: planCheck.quickReplies || [],
+      action: planCheck.action,
+    };
+  }
+
+  let conversation = await SessionManager.getOrCreateConversation(
+    businessId,
+    'website',
+    userId,
+    { name: userName || 'Visitor', phone: userPhone || '' }
+  );
+
+  const plan = getPlan(planCheck.planId);
+  if (isConversationExpired(conversation, plan)) {
+    await SessionManager.resolveConversation(conversation.id);
+    conversation = await SessionManager.getOrCreateConversation(
+      businessId,
+      'website',
+      userId,
+      { name: userName || 'Visitor', phone: userPhone || '' }
+    );
+  }
+
+  const welcome = await sendWelcomeIfNeeded(conversation, businessId);
+
+  const engine = new FlowEngine(businessId, conversation.id);
+  const flows = await engine.loadFlows();
+  const quickReplies = engine.buildFlowMenu(flows);
+
+  return {
+    sessionId: userId,
+    conversationId: conversation.id,
+    welcome,
+    quickReplies,
+    action: welcome ? 'welcome_sent' : null,
+  };
 }
 
 async function handleWidgetMessage({ businessId, sessionId, message, userName, userPhone }) {
@@ -181,6 +267,7 @@ async function handleWidgetMessage({ businessId, sessionId, message, userName, u
     userId,
     userMessage: sanitizeInput(message),
     userData: { name: userName || 'Visitor', phone: userPhone || '' },
+    skipWelcome: true,
   });
 
   return { ...result, sessionId: userId, conversationId: result.conversationId };
@@ -229,5 +316,6 @@ module.exports = {
   handleWhatsAppWebhook,
   handleTelegramUpdate,
   handleWidgetMessage,
+  handleWidgetStart,
   getWidgetAgentMessages,
 };

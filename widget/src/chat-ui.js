@@ -126,7 +126,6 @@ export class ChatUI {
     const name = this.introNameInput.value.trim();
     const phone = this.introPhoneInput.value.trim();
 
-    // Validate
     if (!name) {
       this.showIntroError('Please enter your name.');
       this.introNameInput.focus();
@@ -138,7 +137,6 @@ export class ChatUI {
       return;
     }
 
-    // Basic phone validation (at least 7 digits)
     const phoneDigits = phone.replace(/\D/g, '');
     if (phoneDigits.length < 7) {
       this.showIntroError('Please enter a valid phone number.');
@@ -150,18 +148,12 @@ export class ChatUI {
     this.userPhone = phone;
     this.introComplete = true;
 
-    // Switch to chat view
     this.introEl.style.display = 'none';
     this.messagesEl.style.display = 'flex';
     this.inputArea.style.display = 'flex';
 
-    // Show welcome message as bot message
-    const welcomeMsg = this.config.welcomeMessage || `Hello! Welcome to ${this.config.botName || 'our chat'}. How can I help you?`;
-    this.addMessage(`Hi ${name}! ${welcomeMsg}`, 'bot');
-
     this.input.focus();
 
-    // Notify parent
     if (this.onIntroComplete) {
       this.onIntroComplete({ name, phone });
     }

@@ -3,10 +3,20 @@ const { getAIResponse, shouldHandoff } = require('./ai/aiService');
 const SessionManager = require('./sessionManager');
 const { sanitizeInput } = require('../utils/sanitize');
 const { trackEvent } = require('./analyticsService');
-const { notifyAdminNewBooking } = require('./appointmentNotificationService');
-const { v4: uuidv4 } = require('uuid');
+const {
+  resolveSessionKey,
+  detectRecallIntent,
+  isValidDate,
+  normalizeTime,
+  fetchUserRecords,
+  formatRecallResponse,
+  createAppointmentRecord,
+  parseAIActions,
+  executeAIActions,
+  saveFlowOrder,
+} = require('./conversationActionService');
 
-const GREETING_PATTERN = /^(hi|hello|hey|hola|namaste|start|menu|help|good\s*(morning|afternoon|evening)|yo|sup)[!.?\s]*$/i;
+const GREETING_PATTERN = /^(hi|hello|hey|hola|namaste|start|menu|good\s*(morning|afternoon|evening)|yo|sup)[!.?\s]*$/i;
 
 const TRIGGER_ALIASES = {
   book: ['book', 'booking', 'appointment', 'appointments', 'schedule', 'reserve', 'visit'],
@@ -139,60 +149,44 @@ class FlowEngine {
   async handleBookingStep(step, conv) {
     const session = conv.sessionData || {};
     const serviceName = session.selection || session.service || session.lastChoice || 'General Consultation';
-    const date = session.date || session.text || '';
-    const time = session.time || session.text || '';
+    const date = session.date || '';
+    const time = normalizeTime(session.time || '09:00');
 
-    if (!date || !time) {
+    if (!date) {
       return {
-        reply: step.message || 'Let me confirm your booking details. What date and time work for you?',
+        reply: step.message || 'Let me confirm your booking details. What date works for you? (YYYY-MM-DD)',
         quickReplies: [],
         action: null,
       };
     }
 
-    // Re-read conversation from DB to get latest userName/userPhone
-    const freshConv = await this.loadConversation() || conv;
-
-    // Resolve user name: conversation field > session data > fallback
-    const userName = freshConv.userName || session.name || conv.userName || 'Guest';
-
-    // Resolve user phone: conversation field > session data > WhatsApp userId fallback
-    let userPhone = freshConv.userPhone || session.phone || conv.userPhone || '';
-    if (!userPhone && freshConv.channel === 'whatsapp') {
-      userPhone = freshConv.userId || '';
+    if (!isValidDate(date)) {
+      return {
+        reply: 'Please enter a valid date in YYYY-MM-DD format (e.g. 2026-06-15).',
+        quickReplies: [],
+        action: null,
+      };
     }
 
-    const appointmentId = uuidv4();
-    const appointment = {
+    const freshConv = await this.loadConversation() || conv;
+
+    await createAppointmentRecord({
       businessId: this.businessId,
       conversationId: this.conversationId,
+      conv: freshConv,
       serviceName,
-      userId: freshConv.userId,
-      userName,
-      userPhone,
-      userEmail: session.email || '',
       date,
-      time: time.length === 5 ? time : time.substring(0, 5),
-      duration: 30,
-      status: 'confirmed',
-      channel: freshConv.channel || 'website',
+      time,
       notes: JSON.stringify(session),
-      reminderSent: false,
-      dailyReminderSent: false,
-      createdAt: getFieldValue().serverTimestamp(),
-      updatedAt: getFieldValue().serverTimestamp(),
-    };
-
-    await this.db.collection('appointments').doc(appointmentId).set(appointment);
-    await trackEvent(this.businessId, conv.channel || 'website', 'appointment');
-    await notifyAdminNewBooking(this.businessId, appointment);
+      source: 'flow',
+    });
 
     await SessionManager.updateConversation(this.conversationId, {
       currentFlowId: null,
       currentStepId: null,
     });
 
-    const summary = `✅ Booking confirmed!\n\nService: ${serviceName}\nDate: ${appointment.date}\nTime: ${appointment.time}\n\nWe look forward to seeing you!`;
+    const summary = `✅ Booking confirmed!\n\nService: ${serviceName}\nDate: ${date}\nTime: ${time}\n\nWe look forward to seeing you!`;
 
     return {
       reply: step.message ? `${step.message}\n\n${summary}` : summary,
@@ -226,13 +220,36 @@ class FlowEngine {
 
   async getAIReply(userMessage, conv) {
     const history = await SessionManager.getConversationHistory(this.conversationId);
+    const userRecords = await fetchUserRecords(this.businessId, conv);
     const aiReply = await getAIResponse(
       this.businessId,
       history,
       userMessage,
-      conv.sessionData || {}
+      conv.sessionData || {},
+      userRecords
     );
-    return { reply: aiReply, quickReplies: [], action: 'ai_response' };
+
+    const { cleanReply, actions } = parseAIActions(aiReply);
+    let finalReply = cleanReply;
+
+    if (actions.length) {
+      const results = await executeAIActions(actions, {
+        businessId: this.businessId,
+        conversationId: this.conversationId,
+        conv,
+      });
+
+      for (const result of results) {
+        const r = result.record;
+        if (result.type === 'appointment') {
+          finalReply += `\n\n✅ Appointment saved!\nService: ${r.serviceName}\nDate: ${r.date}\nTime: ${r.time}`;
+        } else if (result.type === 'order') {
+          finalReply += `\n\n✅ Order recorded!\nOrder #: ${r.orderNumber}\nDetails: ${r.serviceName}`;
+        }
+      }
+    }
+
+    return { reply: finalReply.trim(), quickReplies: [], action: 'ai_response' };
   }
 
   async advanceStep(stepId, userInput) {
@@ -246,14 +263,10 @@ class FlowEngine {
     if (!currentStep) return null;
 
     const sanitizedInput = sanitizeInput(userInput);
-    const aiConfig = await getBusinessAIConfig(this.businessId);
 
     if (currentStep.quickReplies?.length || currentStep.conditions?.length) {
       const nextFromChoice = this.resolveNextStepId(currentStep, sanitizedInput);
       if (nextFromChoice === null && !currentStep.inputType) {
-        if (aiConfig.enableAI !== false) {
-          return this.getAIReply(sanitizedInput, conv);
-        }
         return {
           reply: `Please select one of the options below:\n\n${currentStep.message}`,
           quickReplies: currentStep.quickReplies || [],
@@ -270,10 +283,18 @@ class FlowEngine {
         sessionUpdate.lastChoice = choice;
       }
     }
-    if (currentStep.inputType === 'date') sessionUpdate.date = sanitizedInput;
-    if (currentStep.inputType === 'text') sessionUpdate.time = sanitizedInput;
-    if (currentStep.inputType === 'phone') sessionUpdate.phone = sanitizedInput;
-    if (currentStep.inputType === 'email') sessionUpdate.email = sanitizedInput;
+
+    const sessionKey = resolveSessionKey(currentStep);
+    if (sessionKey) {
+      if (sessionKey === 'date' && !isValidDate(sanitizedInput)) {
+        return {
+          reply: 'Please enter a valid date in YYYY-MM-DD format (e.g. 2026-06-15).',
+          quickReplies: currentStep.quickReplies || [],
+          action: null,
+        };
+      }
+      sessionUpdate[sessionKey] = sanitizedInput;
+    }
 
     await this.saveSession(sessionUpdate);
 
@@ -281,7 +302,15 @@ class FlowEngine {
 
     if (!nextStepId) {
       if (currentStep.type === 'booking') {
-        return this.handleBookingStep(currentStep, { ...conv, sessionData: { ...conv.sessionData, ...sessionUpdate } });
+        return this.handleBookingStep(currentStep, {
+          ...conv,
+          sessionData: { ...conv.sessionData, ...sessionUpdate },
+        });
+      }
+
+      const mergedSession = { ...conv.sessionData, ...sessionUpdate };
+      if (normalizeText(flow.trigger) === 'order' || flow.name?.toLowerCase().includes('order')) {
+        await saveFlowOrder({ ...conv, businessId: this.businessId, id: this.conversationId }, flow, mergedSession);
       }
 
       await SessionManager.updateConversation(this.conversationId, {
@@ -289,7 +318,7 @@ class FlowEngine {
         currentStepId: null,
       });
       return {
-        reply: 'Thank you! Is there anything else I can help you with?',
+        reply: 'Thank you! Your request has been recorded. Is there anything else I can help you with?',
         quickReplies: [],
         action: 'flow_complete',
       };
@@ -336,7 +365,6 @@ class FlowEngine {
       return await this._processMessage(userMessage);
     } catch (error) {
       console.error('[FlowEngine] processMessage failed:', error.message);
-      // Never surface an error to the customer — try AI, then a safe fallback.
       try {
         const conv = await this.loadConversation();
         const aiConfig = await getBusinessAIConfig(this.businessId);
@@ -370,6 +398,32 @@ class FlowEngine {
       return { reply: null, action: 'handoff_active' };
     }
 
+    if (detectRecallIntent(sanitized)) {
+      const records = await fetchUserRecords(this.businessId, conv);
+      return {
+        reply: formatRecallResponse(records),
+        quickReplies: [],
+        action: 'recall',
+      };
+    }
+
+    if (conv.currentFlowId && conv.currentStepId) {
+      const result = await this.advanceStep(conv.currentStepId, sanitized);
+      if (result) return result;
+      const reprompt = await this.repromptCurrentStep(conv);
+      if (reprompt) return reprompt;
+    }
+
+    let matchedFlow = this.matchFlow(sanitized, flows);
+
+    if (!matchedFlow) {
+      matchedFlow = flows.find((f) => textsMatch(sanitized, f.name) || textsMatch(sanitized, f.trigger));
+    }
+
+    if (matchedFlow) {
+      return this.startFlow(matchedFlow);
+    }
+
     if (shouldHandoff(sanitized, aiConfig)) {
       await SessionManager.setHandoff(this.conversationId);
       return {
@@ -379,38 +433,6 @@ class FlowEngine {
       };
     }
 
-    // User is inside an active flow — always follow the flow, never AI
-    if (conv.currentFlowId && conv.currentStepId) {
-      const result = await this.advanceStep(conv.currentStepId, sanitized);
-      if (result) return result;
-      const reprompt = await this.repromptCurrentStep(conv);
-      if (reprompt) return reprompt;
-    }
-
-    // Match flow by trigger keyword, alias, or greeting
-    let matchedFlow = this.matchFlow(sanitized, flows);
-
-    // Match flow by menu label (flow name)
-    if (!matchedFlow) {
-      matchedFlow = flows.find((f) => textsMatch(sanitized, f.name) || textsMatch(sanitized, f.trigger));
-    }
-
-    // Auto-start default flow on first user message ONLY when AI is off.
-    // With AI on, let the agent answer real questions instead of forcing
-    // every first message into the default booking flow.
-    if (!matchedFlow && flows.length > 0 && aiConfig.enableAI === false) {
-      const history = await SessionManager.getConversationHistory(this.conversationId, 5);
-      const userMessages = history.filter((m) => m.role === 'user');
-      if (userMessages.length <= 1) {
-        matchedFlow = flows[0];
-      }
-    }
-
-    if (matchedFlow) {
-      return this.startFlow(matchedFlow);
-    }
-
-    // AI answers when no flow matches (default on; disable in AI Settings)
     if (aiConfig.enableAI !== false) {
       return this.getAIReply(sanitized, conv);
     }

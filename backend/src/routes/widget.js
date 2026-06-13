@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { handleWidgetMessage, getWidgetAgentMessages } = require('../controllers/messageController');
+const { handleWidgetMessage, getWidgetAgentMessages, handleWidgetStart } = require('../controllers/messageController');
 const { getBusiness, getDb } = require('../firebase/admin');
 const { apiLimiter } = require('../middleware/rateLimiter');
 
@@ -75,6 +75,31 @@ router.get('/api/widget/messages', apiLimiter, async (req, res) => {
     }
 
     const result = await getWidgetAgentMessages({ businessId, sessionId, conversationId, after });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/api/widget/start', apiLimiter, async (req, res) => {
+  try {
+    const { businessId, sessionId, userName, userPhone } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+
+    const business = await getBusiness(businessId);
+    if (!business || !business.isActive) {
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const websiteChannel = await getWebsiteChannel(businessId);
+    if (websiteChannel && websiteChannel.enabled === false) {
+      return res.status(403).json({ error: 'Website widget channel is disabled' });
+    }
+
+    const result = await handleWidgetStart({ businessId, sessionId, userName, userPhone });
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });

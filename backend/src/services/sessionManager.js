@@ -31,10 +31,10 @@ class SessionManager {
           ...updates,
           updatedAt: getFieldValue().serverTimestamp(),
         });
-        return { id: doc.id, ...data, ...updates };
+        return { id: doc.id, ...data, ...updates, isNew: false };
       }
 
-      return { id: doc.id, ...data };
+      return { id: doc.id, ...data, isNew: false };
     }
 
     const conversationId = uuidv4();
@@ -49,13 +49,14 @@ class SessionManager {
       currentStepId: null,
       sessionData: {},
       assignedAgent: null,
+      welcomeSent: false,
       createdAt: getFieldValue().serverTimestamp(),
       updatedAt: getFieldValue().serverTimestamp(),
       lastMessageAt: getFieldValue().serverTimestamp(),
     };
 
     await db.collection('conversations').doc(conversationId).set(conversation);
-    return { id: conversationId, ...conversation };
+    return { id: conversationId, ...conversation, isNew: true };
   }
 
   static async updateConversation(conversationId, updates) {

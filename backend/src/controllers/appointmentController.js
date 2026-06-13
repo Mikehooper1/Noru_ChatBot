@@ -17,6 +17,7 @@ async function createAppointment(req, res) {
     const appointment = {
       businessId: data.businessId,
       conversationId: data.conversationId || '',
+      recordType: data.recordType || 'appointment',
       serviceId: data.serviceId,
       serviceName: data.serviceName,
       userId: data.userId,
