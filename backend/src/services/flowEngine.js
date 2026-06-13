@@ -6,6 +6,8 @@ const { trackEvent } = require('./analyticsService');
 const {
   resolveSessionKey,
   detectRecallIntent,
+  detectModifyIntent,
+  detectCancelIntent,
   isValidDate,
   normalizeTime,
   fetchUserRecords,
@@ -14,6 +16,8 @@ const {
   parseAIActions,
   executeAIActions,
   saveFlowOrder,
+  handleModifyRequest,
+  isTimeOnlyInput,
 } = require('./conversationActionService');
 
 const GREETING_PATTERN = /^(hi|hello|hey|hola|namaste|start|menu|good\s*(morning|afternoon|evening)|yo|sup)[!.?\s]*$/i;
@@ -88,7 +92,12 @@ class FlowEngine {
       if (!trigger) continue;
 
       const aliases = TRIGGER_ALIASES[trigger] || [trigger];
-      if (aliases.some((alias) => lower.includes(alias) || lower === alias)) {
+      if (
+        aliases.some((alias) => {
+          const pattern = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+          return pattern.test(lower);
+        })
+      ) {
         return flow;
       }
     }
@@ -98,6 +107,19 @@ class FlowEngine {
     }
 
     return null;
+  }
+
+  shouldSkipFlowStart(message, session = {}) {
+    if (session.modifyMode) return true;
+    if (detectModifyIntent(message) || detectCancelIntent(message)) return true;
+    if (session.lastAction === 'recall' || session.lastAction === 'modify') {
+      if (isTimeOnlyInput(message) || isValidDate((message || '').trim())) return true;
+    }
+    return false;
+  }
+
+  async updateSessionState(conversationId, updates) {
+    await SessionManager.updateConversation(conversationId, updates);
   }
 
   buildFlowMenu(flows) {
@@ -242,9 +264,13 @@ class FlowEngine {
       for (const result of results) {
         const r = result.record;
         if (result.type === 'appointment') {
-          finalReply += `\n\n✅ Appointment saved!\nService: ${r.serviceName}\nDate: ${r.date}\nTime: ${r.time}`;
+          finalReply += `\n\n✅ Appointment saved!\nService: ${r.serviceName}\nDate: ${r.date}\nTime: ${normalizeTime(r.time)}`;
         } else if (result.type === 'order') {
           finalReply += `\n\n✅ Order recorded!\nOrder #: ${r.orderNumber}\nDetails: ${r.serviceName}`;
+        } else if (result.type === 'update') {
+          finalReply += `\n\n✅ Appointment updated!\nService: ${r.serviceName}\nDate: ${r.date}\nTime: ${normalizeTime(r.time)}`;
+        } else if (result.type === 'cancel') {
+          finalReply += `\n\n✅ Appointment cancelled for ${r.serviceName} on ${r.date}.`;
         }
       }
     }
@@ -287,13 +313,20 @@ class FlowEngine {
     const sessionKey = resolveSessionKey(currentStep);
     if (sessionKey) {
       if (sessionKey === 'date' && !isValidDate(sanitizedInput)) {
+        if (isTimeOnlyInput(sanitizedInput)) {
+          return {
+            reply: 'That looks like a time. Say "change time to 14:30" to update your appointment, or enter a date as YYYY-MM-DD.',
+            quickReplies: ['Change time'],
+            action: null,
+          };
+        }
         return {
           reply: 'Please enter a valid date in YYYY-MM-DD format (e.g. 2026-06-15).',
           quickReplies: currentStep.quickReplies || [],
           action: null,
         };
       }
-      sessionUpdate[sessionKey] = sanitizedInput;
+      sessionUpdate[sessionKey] = sessionKey === 'time' ? normalizeTime(sanitizedInput) : sanitizedInput;
     }
 
     await this.saveSession(sessionUpdate);
@@ -394,16 +427,40 @@ class FlowEngine {
     const business = await getBusiness(this.businessId);
     const flows = await this.loadFlows();
 
+    const session = conv.sessionData || {};
+
     if (conv.status === 'handoff') {
       return { reply: null, action: 'handoff_active' };
+    }
+
+    if (session.modifyMode || detectModifyIntent(sanitized) || detectCancelIntent(sanitized)) {
+      const modifyResult = await handleModifyRequest({
+        message: sanitized,
+        conv,
+        businessId: this.businessId,
+        businessType: business?.type || '',
+        conversationId: this.conversationId,
+        updateSession: (id, updates) => this.updateSessionState(id, updates),
+      });
+      if (modifyResult) return modifyResult;
     }
 
     if (detectRecallIntent(sanitized)) {
       const records = await fetchUserRecords(this.businessId, conv);
       const businessType = business?.type || '';
+      await SessionManager.updateConversation(this.conversationId, {
+        currentFlowId: null,
+        currentStepId: null,
+        sessionData: {
+          ...session,
+          recalledRecordIds: records.map((r) => r.id),
+          lastAction: 'recall',
+          modifyMode: null,
+        },
+      });
       return {
         reply: formatRecallResponse(records, businessType),
-        quickReplies: [],
+        quickReplies: ['Change date', 'Change time'],
         action: 'recall',
       };
     }
@@ -415,13 +472,25 @@ class FlowEngine {
       if (reprompt) return reprompt;
     }
 
+    if (this.shouldSkipFlowStart(sanitized, session)) {
+      const modifyResult = await handleModifyRequest({
+        message: sanitized,
+        conv,
+        businessId: this.businessId,
+        businessType: business?.type || '',
+        conversationId: this.conversationId,
+        updateSession: (id, updates) => this.updateSessionState(id, updates),
+      });
+      if (modifyResult) return modifyResult;
+    }
+
     let matchedFlow = this.matchFlow(sanitized, flows);
 
     if (!matchedFlow) {
       matchedFlow = flows.find((f) => textsMatch(sanitized, f.name) || textsMatch(sanitized, f.trigger));
     }
 
-    if (matchedFlow) {
+    if (matchedFlow && !this.shouldSkipFlowStart(sanitized, session)) {
       return this.startFlow(matchedFlow);
     }
 

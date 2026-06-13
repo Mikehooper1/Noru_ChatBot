@@ -74,6 +74,11 @@ async function buildSessionWelcome({ conversation, businessId, flowQuickReplies 
   for (const label of recallConfig.quickReplies) {
     if (!quickReplies.includes(label)) quickReplies.push(label);
   }
+  if (records.length) {
+    for (const label of ['Change date', 'Change time']) {
+      if (!quickReplies.includes(label)) quickReplies.push(label);
+    }
+  }
   for (const label of flowQuickReplies) {
     if (label && !quickReplies.includes(label)) quickReplies.push(label);
   }
@@ -89,6 +94,16 @@ async function buildSessionWelcome({ conversation, businessId, flowQuickReplies 
 
 async function sendSessionWelcome(conversation, businessId, flowQuickReplies = []) {
   const session = await buildSessionWelcome({ conversation, businessId, flowQuickReplies });
+  const records = await fetchUserRecords(businessId, conversation);
+
+  await SessionManager.updateConversation(conversation.id, {
+    sessionData: {
+      ...(conversation.sessionData || {}),
+      recalledRecordIds: records.map((r) => r.id),
+      lastAction: records.length ? 'recall' : conversation.sessionData?.lastAction,
+      modifyMode: null,
+    },
+  });
 
   await SessionManager.saveMessage(conversation.id, 'bot', session.welcome);
   await SessionManager.saveMessage(conversation.id, 'bot', session.recallPrompt);
