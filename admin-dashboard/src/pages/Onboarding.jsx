@@ -247,6 +247,7 @@ export default function Onboarding() {
                 onChange={updateDetails('type')}
                 options={[
                   { value: 'clinic', label: 'Clinic' },
+                  { value: 'hospital', label: 'Hospital' },
                   { value: 'salon', label: 'Salon' },
                   { value: 'ecommerce', label: 'E-commerce' },
                   { value: 'saas', label: 'SaaS' },

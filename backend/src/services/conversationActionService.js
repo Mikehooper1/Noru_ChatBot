@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { getDb, getFieldValue } = require('../firebase/admin');
+const { isHealthBusiness } = require('./clinicQuestionService');
 const { trackEvent } = require('./analyticsService');
 const { notifyAdminNewBooking } = require('./appointmentNotificationService');
 
@@ -414,7 +415,7 @@ function recordLabel(r, businessType) {
   if (r.recordType === 'order') {
     return businessType === 'ecommerce' ? 'Order / Delivery' : 'Order';
   }
-  return businessType === 'clinic' ? 'Appointment' : businessType === 'salon' ? 'Booking' : 'Appointment';
+  return isHealthBusiness(businessType) ? 'Appointment' : businessType === 'salon' ? 'Booking' : 'Appointment';
 }
 
 function formatRecallResponse(records, businessType = '') {
@@ -424,7 +425,7 @@ function formatRecallResponse(records, businessType = '') {
     if (type === 'ecommerce') {
       return 'I could not find any orders or deliveries linked to your phone number. Share your order number if you have one.';
     }
-    if (type === 'clinic' || type === 'salon') {
+    if (isHealthBusiness(type) || type === 'salon') {
       return 'I could not find any appointments linked to your account. Would you like to book one now?';
     }
     return 'I could not find any bookings or orders linked to your account. If you recently booked, please share your phone number.';
@@ -440,7 +441,7 @@ function formatRecallResponse(records, businessType = '') {
   const header =
     type === 'ecommerce'
       ? 'Here are your recent orders & deliveries:'
-      : type === 'clinic'
+      : isHealthBusiness(type)
         ? 'Here are your appointments:'
         : type === 'salon'
           ? 'Here are your salon bookings:'

@@ -1,4 +1,6 @@
-function buildSystemPrompt(aiConfig, sessionData, userRecords = []) {
+const { isHealthBusiness, buildClinicSystemPromptSection } = require('../clinicQuestionService');
+
+function buildSystemPrompt(aiConfig, sessionData, userRecords = [], businessType = '') {
   const recordsContext = userRecords.length
     ? `\nUser's existing bookings/orders:\n${userRecords
         .map(
@@ -17,6 +19,7 @@ Language: ${aiConfig.language}
 
 Business Knowledge Base:
 ${aiConfig.knowledgeBase}
+${isHealthBusiness(businessType) ? buildClinicSystemPromptSection() : ''}
 
 Rules:
 - Keep responses concise and conversational (max 3 sentences unless listing options)

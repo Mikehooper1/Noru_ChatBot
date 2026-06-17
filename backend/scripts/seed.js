@@ -20,13 +20,16 @@ const businesses = [
       name: 'Appointment Booking',
       trigger: 'book',
       steps: [
-        { id: 's1', type: 'message', message: 'Welcome to HealthCare Clinic! Which department do you need?', quickReplies: ['General', 'Dental', 'Lab'], inputType: null, nextStepId: 's2', conditions: [] },
-        { id: 's2', type: 'question', message: 'Great choice! What date works for you? (DD-MM-YYYY)', quickReplies: [], inputType: 'date', nextStepId: 's3', conditions: [] },
-        { id: 's3', type: 'question', message: 'What time would you prefer? (e.g. 14:00)', quickReplies: [], inputType: 'text', nextStepId: 's4', conditions: [] },
-        { id: 's4', type: 'booking', message: 'Perfect! I am booking your appointment now.', quickReplies: [], inputType: null, nextStepId: null, conditions: [] },
+        { id: 's1', type: 'message', message: 'Welcome to HealthCare Clinic! How can we help you today?', quickReplies: ['Book appointment', 'My appointments', 'Services & doctors', 'Billing & fees', 'Location & hours', 'Emergency'], inputType: null, nextStepId: 's2', conditions: [{ if: 'My appointments', goto: 's5' }, { if: 'Services & doctors', goto: 's5' }, { if: 'Billing & fees', goto: 's5' }, { if: 'Location & hours', goto: 's5' }, { if: 'Emergency', goto: 's5' }] },
+        { id: 's2', type: 'question', message: 'Which department do you need?', quickReplies: ['General', 'Dental', 'Lab'], inputType: null, nextStepId: 's3', conditions: [] },
+        { id: 's3', type: 'question', message: 'Great choice! What date works for you? (YYYY-MM-DD)', quickReplies: [], inputType: 'date', nextStepId: 's4', conditions: [] },
+        { id: 's4', type: 'question', message: 'What time would you prefer? (e.g. 14:00)', quickReplies: [], inputType: 'text', nextStepId: 's6', conditions: [] },
+        { id: 's5', type: 'message', message: 'Sure — please type your question and I will help or connect you to our team.', quickReplies: [], inputType: 'text', nextStepId: null, conditions: [] },
+        { id: 's6', type: 'booking', message: 'Perfect! I am booking your appointment now.', quickReplies: [], inputType: null, nextStepId: null, conditions: [] },
       ],
     },
-    systemPrompt: 'You are HealthBot, a friendly clinic assistant. Help patients book appointments, answer common medical FAQs, and provide clinic information. Never give medical diagnoses.',
+    systemPrompt: 'You are HealthBot, a friendly clinic receptionist. Help patients book appointments, answer common clinic FAQs from the knowledge base, and provide clinic information. Never give medical diagnoses or prescribe medication.',
+    knowledgeBase: `Business: HealthCare Clinic\nType: clinic\nAddress: 123 Health Street, Mumbai\nHours: Mon-Sat 9 AM - 7 PM, Sun 10 AM - 2 PM\nConsultation fee: INR 300\nInsurance: Star Health, HDFC Ergo (cashless)\nEmergency helpline: +91-9876543210\nSpecialties: General, Dental, Lab\nPayment: cash, card, UPI`,
   },
   {
     name: 'Glow Salon',
@@ -190,7 +193,7 @@ async function seed() {
       fallbackMessage: 'How can I help you today? Please choose an option below.',
       enableAI: true,
       language: 'en',
-      knowledgeBase: `Business: ${biz.name}\nType: ${biz.type}\nServices: ${biz.services.map((s) => s.name).join(', ')}`,
+      knowledgeBase: biz.knowledgeBase || `Business: ${biz.name}\nType: ${biz.type}\nServices: ${biz.services.map((s) => s.name).join(', ')}`,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 

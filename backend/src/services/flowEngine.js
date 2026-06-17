@@ -21,6 +21,7 @@ const {
   handleModifyRequest,
   isTimeOnlyInput,
 } = require('./conversationActionService');
+const { isHealthBusiness, resolveClinicMessage } = require('./clinicQuestionService');
 
 const GREETING_PATTERN = /^(hi|hello|hey|hola|namaste|start|menu|good\s*(morning|afternoon|evening)|yo|sup)[!.?\s]*$/i;
 
@@ -242,7 +243,7 @@ class FlowEngine {
     };
   }
 
-  async getAIReply(userMessage, conv) {
+  async getAIReply(userMessage, conv, businessType = '') {
     const history = await SessionManager.getConversationHistory(this.conversationId);
     const userRecords = await fetchUserRecords(this.businessId, conv);
     const aiReply = await getAIResponse(
@@ -250,7 +251,8 @@ class FlowEngine {
       history,
       userMessage,
       conv.sessionData || {},
-      userRecords
+      userRecords,
+      businessType
     );
 
     const { cleanReply, actions } = parseAIActions(aiReply);
@@ -480,6 +482,27 @@ class FlowEngine {
       };
     }
 
+    const businessType = business?.type || '';
+    if (isHealthBusiness(businessType)) {
+      const clinicResult = resolveClinicMessage(sanitized, businessType);
+      if (clinicResult?.action === 'urgent' || clinicResult?.action === 'handoff') {
+        await SessionManager.setHandoff(this.conversationId);
+        await trackEvent(this.businessId, conv.channel || 'website', 'handoff');
+        return {
+          reply: clinicResult.reply,
+          quickReplies: [],
+          action: clinicResult.action === 'urgent' ? 'urgent_handoff' : 'handoff',
+        };
+      }
+      if (clinicResult?.action === 'category') {
+        return {
+          reply: clinicResult.reply,
+          quickReplies: clinicResult.quickReplies || [],
+          action: 'clinic_category',
+        };
+      }
+    }
+
     if (conv.currentFlowId && conv.currentStepId) {
       const result = await this.advanceStep(conv.currentStepId, sanitized);
       if (result) return result;
@@ -519,7 +542,7 @@ class FlowEngine {
     }
 
     if (aiConfig.enableAI !== false) {
-      return this.getAIReply(sanitized, conv);
+      return this.getAIReply(sanitized, conv, businessType);
     }
 
     return this.showFlowMenu(flows, business, aiConfig);

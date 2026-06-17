@@ -2,11 +2,17 @@ const SessionManager = require('./sessionManager');
 const { getBusiness } = require('../firebase/admin');
 const { fetchUserRecords, formatRecallResponse, getRecallQuickReplies } = require('./conversationActionService');
 const { trackEvent } = require('./analyticsService');
+const { isHealthBusiness, CLINIC_MENU_QUICK_REPLIES } = require('./clinicQuestionService');
 
 const RECALL_CONFIG = {
   clinic: {
-    prompt: 'Would you like to check your upcoming appointments?',
-    quickReplies: ['My appointments', 'Book appointment'],
+    prompt: 'How can I help you today? Choose a topic or ask your question.',
+    quickReplies: CLINIC_MENU_QUICK_REPLIES,
+    recallPhrases: ['my appointments', 'show my appointments'],
+  },
+  hospital: {
+    prompt: 'How can I help you today? Choose a topic or ask your question.',
+    quickReplies: CLINIC_MENU_QUICK_REPLIES,
     recallPhrases: ['my appointments', 'show my appointments'],
   },
   salon: {
@@ -53,7 +59,7 @@ function buildExistingRecordsMessage(records, business) {
   const header =
     type === 'ecommerce'
       ? '📦 Here are your recent orders & deliveries:'
-      : type === 'clinic' || type === 'salon'
+      : isHealthBusiness(type) || type === 'salon'
         ? '📅 Here are your upcoming bookings:'
         : '📋 Here are your recent records:';
 
