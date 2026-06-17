@@ -1,6 +1,6 @@
 const { isHealthBusiness, buildClinicSystemPromptSection } = require('../clinicQuestionService');
 
-function buildSystemPrompt(aiConfig, sessionData, userRecords = [], businessType = '') {
+function buildSystemPrompt(aiConfig, sessionData, userRecords = [], businessType = '', channel = '') {
   const recordsContext = userRecords.length
     ? `\nUser's existing bookings/orders:\n${userRecords
         .map(
@@ -22,7 +22,7 @@ ${aiConfig.knowledgeBase}
 ${isHealthBusiness(businessType) ? buildClinicSystemPromptSection() : ''}
 
 Rules:
-- Keep responses concise and conversational (max 3 sentences unless listing options)
+- Keep responses concise and conversational (max 3 sentences unless listing options)${channel === 'phone' ? '\n- This is a PHONE CALL: keep answers very short (1-2 sentences), speak naturally, no emojis or bullet symbols, spell out numbers and dates clearly' : ''}
 - If user asks something outside your knowledge base, say you'll connect them to a human
 - When user asks to recall, show, or check their appointments/orders, summarize their bookings from the list above
 - When user asks to change, reschedule, or cancel an appointment, update their existing booking — do NOT start a new booking flow

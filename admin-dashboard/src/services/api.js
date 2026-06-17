@@ -100,6 +100,14 @@ export const api = {
     request('/api/channels/whatsapp/test', { method: 'POST', body: JSON.stringify({ businessId }) }),
   registerTelegramWebhook: (businessId) =>
     request('/api/channels/telegram/register-webhook', { method: 'POST', body: JSON.stringify({ businessId }) }),
+  getPhoneConfig: (businessId) =>
+    request(`/api/channels/phone?businessId=${encodeURIComponent(businessId)}`),
+  savePhoneConfig: (data) =>
+    request('/api/channels/phone', { method: 'PUT', body: JSON.stringify(data) }),
+  testPhoneConfig: (businessId) =>
+    request('/api/channels/phone/test', { method: 'POST', body: JSON.stringify({ businessId }) }),
+  registerPhoneWebhook: (businessId) =>
+    request('/api/channels/phone/register-webhook', { method: 'POST', body: JSON.stringify({ businessId }) }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',

@@ -219,6 +219,7 @@ async function getChannelConfig(businessId, channel) {
   const data = { ...doc.data() };
   if (data.accessToken) data.accessToken = decrypt(data.accessToken);
   if (data.botToken) data.botToken = decrypt(data.botToken);
+  if (data.authToken) data.authToken = decrypt(data.authToken);
   return data;
 }
 

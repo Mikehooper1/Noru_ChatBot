@@ -6,6 +6,10 @@ const {
   updateWhatsAppConfig,
   testWhatsAppConfig,
   registerTelegramWebhook,
+  getPhoneConfig,
+  updatePhoneConfig,
+  testPhoneConfig,
+  registerPhoneWebhook,
 } = require('../controllers/channelConfigController');
 const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
 const SessionManager = require('../services/sessionManager');
@@ -24,6 +28,10 @@ router.get('/api/channels/whatsapp', verifyFirebaseToken, getWhatsAppConfig);
 router.put('/api/channels/whatsapp', verifyFirebaseToken, updateWhatsAppConfig);
 router.post('/api/channels/whatsapp/test', verifyFirebaseToken, testWhatsAppConfig);
 router.post('/api/channels/telegram/register-webhook', verifyFirebaseToken, registerTelegramWebhook);
+router.get('/api/channels/phone', verifyFirebaseToken, getPhoneConfig);
+router.put('/api/channels/phone', verifyFirebaseToken, updatePhoneConfig);
+router.post('/api/channels/phone/test', verifyFirebaseToken, testPhoneConfig);
+router.post('/api/channels/phone/register-webhook', verifyFirebaseToken, registerPhoneWebhook);
 
 router.delete('/api/conversations/:id', verifyFirebaseToken, async (req, res) => {
   try {

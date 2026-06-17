@@ -34,6 +34,13 @@ async function deliverAgentReply(conversation, text) {
     if (channel === 'website') {
       return { delivered: true };
     }
+
+    if (channel === 'phone') {
+      return {
+        delivered: false,
+        note: 'Phone calls are live voice sessions — use handoff number transfer during active calls',
+      };
+    }
   } catch (error) {
     console.warn(`[Agent] Failed to deliver ${channel} reply: ${error.message}`);
     await logError(error, businessId).catch(() => {});

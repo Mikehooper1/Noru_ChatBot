@@ -26,7 +26,12 @@ function buildEmbedCode(businessId, websiteConfig) {
 
 export default function ChannelToggle({ businessId, channel, config, label, icon, plan = 'free' }) {
   const allowedByPlan = channelAllowed(plan, channel);
-  const requiredPlan = channel === 'instagram' ? 'Enterprise' : channel !== 'website' ? 'Pro' : null;
+  const requiredPlan =
+    channel === 'instagram' || channel === 'phone'
+      ? 'Enterprise'
+      : channel !== 'website'
+        ? 'Pro'
+        : null;
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ enabled: false, ...(config || {}) });
   const [copied, setCopied] = useState(false);
@@ -39,6 +44,9 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     const safe = { enabled: false, ...(config || {}) };
     if (channel === 'whatsapp') {
       delete safe.accessToken;
+    }
+    if (channel === 'phone') {
+      delete safe.authToken;
     }
     setForm(safe);
   }, [config, channel]);
@@ -61,6 +69,25 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     return saved;
   };
 
+  const persistPhoneConfig = async (updates) => {
+    const payload = {
+      businessId,
+      twilioPhoneNumber: updates.twilioPhoneNumber ?? form.twilioPhoneNumber,
+      accountSid: updates.accountSid ?? form.accountSid,
+      voiceGreeting: updates.voiceGreeting ?? form.voiceGreeting,
+      handoffNumber: updates.handoffNumber ?? form.handoffNumber,
+      ttsVoice: updates.ttsVoice ?? form.ttsVoice,
+      language: updates.language ?? form.language,
+      enabled: updates.enabled ?? form.enabled,
+    };
+    const token = updates.authToken ?? form.authToken;
+    if (token?.trim()) payload.authToken = token.trim();
+
+    const saved = await api.savePhoneConfig(payload);
+    setForm({ ...saved, authToken: '' });
+    return saved;
+  };
+
   const persistConfig = async (updates) => {
     if (!businessId) return;
 
@@ -71,6 +98,20 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
         await persistWhatsAppConfig(updates);
       } catch (err) {
         setError(err.message || 'Failed to save WhatsApp config');
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (channel === 'phone') {
+      setSaving(true);
+      setError('');
+      try {
+        await persistPhoneConfig(updates);
+      } catch (err) {
+        setError(err.message || 'Failed to save Phone Voice config');
         throw err;
       } finally {
         setSaving(false);
@@ -144,6 +185,23 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     }
   };
 
+  const testPhone = async () => {
+    setTesting(true);
+    setTestMessage('');
+    setError('');
+    try {
+      if (form.authToken?.trim() || !form.authTokenConfigured) {
+        await persistPhoneConfig(form);
+      }
+      const result = await api.testPhoneConfig(businessId);
+      setTestMessage(result.message || 'Twilio phone number verified');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const copyEmbed = () => {
     const code = form.embedCode || buildEmbedCode(businessId, form);
     navigator.clipboard.writeText(code);
@@ -160,6 +218,13 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
         setForm({ ...waConfig, accessToken: '' });
       } catch {
         setForm({ enabled: !!config?.enabled, ...(config || {}), accessToken: '' });
+      }
+    } else if (channel === 'phone') {
+      try {
+        const phoneConfig = await api.getPhoneConfig(businessId);
+        setForm({ ...phoneConfig, authToken: '' });
+      } catch {
+        setForm({ enabled: !!config?.enabled, ...(config || {}), authToken: '' });
       }
     } else {
       setForm({ enabled: false, ...(config || {}) });
@@ -339,6 +404,113 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                   <Button variant="secondary" className="mt-2" onClick={copyEmbed}>
                     {copied ? 'Copied!' : 'Copy Embed Code'}
                   </Button>
+                </div>
+              </>
+            )}
+            {channel === 'phone' && (
+              <>
+                <Input
+                  label="Twilio Phone Number"
+                  value={form.twilioPhoneNumber || ''}
+                  onChange={(e) => setForm({ ...form, twilioPhoneNumber: e.target.value })}
+                  placeholder="+919876543210 — E.164 format"
+                />
+                <Input
+                  label="Account SID (optional)"
+                  value={form.accountSid || ''}
+                  onChange={(e) => setForm({ ...form, accountSid: e.target.value })}
+                  placeholder="Leave blank to use platform TWILIO_ACCOUNT_SID"
+                />
+                <div>
+                  <Input
+                    label="Auth Token (optional)"
+                    type="password"
+                    value={form.authToken || ''}
+                    onChange={(e) => setForm({ ...form, authToken: e.target.value })}
+                    placeholder={form.authTokenConfigured ? 'Leave blank to keep existing token' : 'Leave blank to use platform TWILIO_AUTH_TOKEN'}
+                  />
+                  {form.authTokenConfigured && (
+                    <p className="text-xs text-emerald-700 mt-1">Token saved securely on server</p>
+                  )}
+                </div>
+                <Input
+                  label="Voice Greeting"
+                  value={form.voiceGreeting || ''}
+                  onChange={(e) => setForm({ ...form, voiceGreeting: e.target.value })}
+                  placeholder="Hello! Thanks for calling. How can I help you today?"
+                />
+                <Input
+                  label="Human Handoff Number"
+                  value={form.handoffNumber || ''}
+                  onChange={(e) => setForm({ ...form, handoffNumber: e.target.value })}
+                  placeholder="+919876543210 — transfer when caller asks for a human"
+                />
+                <Select
+                  label="TTS Voice"
+                  value={form.ttsVoice || 'Polly.Aditi'}
+                  onChange={(e) => setForm({ ...form, ttsVoice: e.target.value })}
+                  options={[
+                    { value: 'Polly.Aditi', label: 'Aditi (Indian English)' },
+                    { value: 'Polly.Raveena', label: 'Raveena (Indian English)' },
+                    { value: 'Polly.Joanna', label: 'Joanna (US English)' },
+                    { value: 'Polly.Matthew', label: 'Matthew (US English)' },
+                  ]}
+                />
+                <Select
+                  label="Speech Language"
+                  value={form.language || 'en-IN'}
+                  onChange={(e) => setForm({ ...form, language: e.target.value })}
+                  options={[
+                    { value: 'en-IN', label: 'English (India)' },
+                    { value: 'en-US', label: 'English (US)' },
+                    { value: 'hi-IN', label: 'Hindi (India)' },
+                  ]}
+                />
+                <Button variant="secondary" onClick={testPhone} disabled={testing || saving}>
+                  {testing ? 'Testing...' : 'Test Twilio number'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    setTesting(true);
+                    setTestMessage('');
+                    setError('');
+                    try {
+                      if (form.authToken?.trim() || form.twilioPhoneNumber?.trim()) {
+                        await persistPhoneConfig(form);
+                      }
+                      const result = await api.registerPhoneWebhook(businessId);
+                      setTestMessage(result.message || 'Voice webhook registered');
+                    } catch (err) {
+                      setError(err.message);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  disabled={testing || saving}
+                >
+                  {testing ? 'Registering...' : 'Register voice webhook with Twilio'}
+                </Button>
+                {testMessage && channel === 'phone' && (
+                  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                    {testMessage}
+                  </p>
+                )}
+                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
+                  <p className="font-semibold">Twilio Voice webhook URL</p>
+                  <code className="block break-all bg-white px-2 py-1 rounded border">
+                    {`${BACKEND_URL}/webhook/phone/incoming`}
+                  </code>
+                  <p>
+                    1. Buy a Twilio phone number and paste it above.
+                  </p>
+                  <p>
+                    2. Set <strong>TWILIO_ACCOUNT_SID</strong> and <strong>TWILIO_AUTH_TOKEN</strong> on the backend (or add per-business credentials here).
+                  </p>
+                  <p>
+                    3. Click <strong>Register voice webhook with Twilio</strong> — or paste the URL manually in Twilio Console → Phone Numbers → Voice Configuration.
+                  </p>
+                  <p>Requires <strong>Enterprise</strong> plan. Callers speak naturally; the AI agent replies by voice using your existing flows and Gemini settings.</p>
                 </div>
               </>
             )}

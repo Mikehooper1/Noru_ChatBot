@@ -23,7 +23,7 @@ function formatMessages(conversationHistory, userMessage) {
   ];
 }
 
-async function getAIResponse(businessId, conversationHistory, userMessage, sessionData, userRecords = [], businessType = '') {
+async function getAIResponse(businessId, conversationHistory, userMessage, sessionData, userRecords = [], businessType = '', channel = '') {
   const aiConfig = await getBusinessAIConfig(businessId);
   aiConfig._businessId = businessId;
 
@@ -39,7 +39,7 @@ async function getAIResponse(businessId, conversationHistory, userMessage, sessi
     );
   }
 
-  const systemPrompt = buildSystemPrompt(aiConfig, sessionData, userRecords, businessType);
+  const systemPrompt = buildSystemPrompt(aiConfig, sessionData, userRecords, businessType, channel);
   const messages = formatMessages(conversationHistory, userMessage);
 
   try {

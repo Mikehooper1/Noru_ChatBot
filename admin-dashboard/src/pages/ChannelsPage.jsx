@@ -9,6 +9,7 @@ const channels = [
   { id: 'whatsapp', label: 'WhatsApp', icon: '💬' },
   { id: 'telegram', label: 'Telegram', icon: '✈️' },
   { id: 'website', label: 'Website Widget', icon: '🌐' },
+  { id: 'phone', label: 'Phone Voice AI', icon: '📞' },
   { id: 'instagram', label: 'Instagram', icon: '📸' },
 ];
 

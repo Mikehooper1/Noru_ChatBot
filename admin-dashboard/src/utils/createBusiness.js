@@ -167,7 +167,7 @@ export async function createBusiness({ user, name, type, botName, slug, plan = '
     updatedAt: serverTimestamp(),
   });
 
-  const channels = ['whatsapp', 'telegram', 'website', 'instagram'];
+  const channels = ['whatsapp', 'telegram', 'website', 'instagram', 'phone'];
   const channelWrites = channels.map((ch) =>
     setDoc(doc(db, 'businesses', businessId, 'channels', ch), {
       enabled: ch === 'website',

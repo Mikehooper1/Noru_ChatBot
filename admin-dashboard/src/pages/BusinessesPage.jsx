@@ -117,7 +117,7 @@ export default function BusinessesPage() {
         updatedAt: serverTimestamp(),
       });
 
-      const channels = ['whatsapp', 'telegram', 'website', 'instagram'];
+      const channels = ['whatsapp', 'telegram', 'website', 'instagram', 'phone'];
       const channelWrites = channels.map((ch) =>
         setDoc(doc(db, 'businesses', businessId, 'channels', ch), {
           enabled: ch === 'website',

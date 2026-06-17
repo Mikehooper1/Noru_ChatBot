@@ -127,7 +127,7 @@ async function seed() {
       plan: 'pro',
     });
 
-    const channels = ['whatsapp', 'telegram', 'website', 'instagram'];
+    const channels = ['whatsapp', 'telegram', 'website', 'instagram', 'phone'];
     for (const ch of channels) {
       const chRef = bizRef.collection('channels').doc(ch);
       batch.set(chRef, {
@@ -149,6 +149,16 @@ async function seed() {
         }),
         ...(ch === 'telegram' && { botToken: encrypt(''), botUsername: '', webhookUrl: '' }),
         ...(ch === 'instagram' && { accessToken: encrypt(''), pageId: '', enabled: false }),
+        ...(ch === 'phone' && {
+          twilioPhoneNumber: '',
+          accountSid: '',
+          authToken: encrypt(''),
+          voiceGreeting: '',
+          handoffNumber: '',
+          ttsVoice: 'Polly.Aditi',
+          language: 'en-IN',
+          enabled: false,
+        }),
       });
     }
 

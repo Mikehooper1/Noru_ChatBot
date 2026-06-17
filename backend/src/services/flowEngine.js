@@ -252,7 +252,8 @@ class FlowEngine {
       userMessage,
       conv.sessionData || {},
       userRecords,
-      businessType
+      businessType,
+      conv.channel || ''
     );
 
     const { cleanReply, actions } = parseAIActions(aiReply);

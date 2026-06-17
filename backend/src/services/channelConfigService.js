@@ -78,8 +78,70 @@ async function verifyWhatsAppConfig(businessId) {
   return { ok: true, phoneNumberId: config.phoneNumberId };
 }
 
+async function getPhoneConfigForAdmin(businessId) {
+  const raw = await getRawChannelDoc(businessId, 'phone');
+  if (!raw) {
+    return {
+      enabled: false,
+      twilioPhoneNumber: '',
+      accountSid: '',
+      voiceGreeting: '',
+      handoffNumber: '',
+      ttsVoice: 'Polly.Aditi',
+      language: 'en-IN',
+      authTokenConfigured: false,
+    };
+  }
+
+  const { authToken, ...safe } = raw;
+  return {
+    ...safe,
+    enabled: safe.enabled === true,
+    twilioPhoneNumber: safe.twilioPhoneNumber || '',
+    accountSid: safe.accountSid || '',
+    voiceGreeting: safe.voiceGreeting || '',
+    handoffNumber: safe.handoffNumber || '',
+    ttsVoice: safe.ttsVoice || 'Polly.Aditi',
+    language: safe.language || 'en-IN',
+    authTokenConfigured: Boolean(authToken && String(authToken).length > 10),
+  };
+}
+
+async function savePhoneConfig(businessId, body) {
+  const ref = getDb().collection('businesses').doc(businessId).collection('channels').doc('phone');
+  const existing = (await ref.get()).data() || {};
+
+  const payload = {
+    twilioPhoneNumber: String(body.twilioPhoneNumber ?? existing.twilioPhoneNumber ?? '').trim(),
+    accountSid: String(body.accountSid ?? existing.accountSid ?? '').trim(),
+    voiceGreeting: String(body.voiceGreeting ?? existing.voiceGreeting ?? '').trim(),
+    handoffNumber: String(body.handoffNumber ?? existing.handoffNumber ?? '').trim(),
+    ttsVoice: String(body.ttsVoice ?? existing.ttsVoice ?? 'Polly.Aditi').trim(),
+    language: String(body.language ?? existing.language ?? 'en-IN').trim(),
+    updatedAt: getFieldValue().serverTimestamp(),
+  };
+
+  if (body.enabled !== undefined) {
+    payload.enabled = body.enabled === true;
+  } else {
+    payload.enabled = existing.enabled === true;
+  }
+
+  const newToken = String(body.authToken || '').trim();
+  if (newToken) {
+    payload.authToken = encrypt(newToken);
+  } else if (existing.authToken) {
+    payload.authToken = existing.authToken;
+  }
+
+  await ref.set(payload, { merge: true });
+  return getPhoneConfigForAdmin(businessId);
+}
+
 module.exports = {
   getWhatsAppConfigForAdmin,
   saveWhatsAppConfig,
   verifyWhatsAppConfig,
+  getPhoneConfigForAdmin,
+  savePhoneConfig,
 };

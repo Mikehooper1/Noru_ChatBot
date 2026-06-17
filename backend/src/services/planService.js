@@ -80,7 +80,7 @@ function isConversationExpired(conversation, plan) {
 async function buildUpgradeMessage(reason, businessName, businessId, channel) {
   const { createCheckoutLinks } = require('./checkoutService');
   const suggestedPlanIds =
-    channel === 'instagram' ? ['enterprise'] : ['pro', 'enterprise'];
+    channel === 'instagram' || channel === 'phone' ? ['enterprise'] : ['pro', 'enterprise'];
   const paymentLinks = await createCheckoutLinks(businessId, suggestedPlanIds);
   const adminUrl = `${ADMIN_URL}/plans`;
 
@@ -116,11 +116,16 @@ async function checkPlanAccess(businessId, channel) {
   const usage = await getUsage(businessId);
 
   if (!plan.channels.includes(channel)) {
-    const channelNames = { whatsapp: 'WhatsApp', telegram: 'Telegram', instagram: 'Instagram' };
+    const channelNames = {
+      whatsapp: 'WhatsApp',
+      telegram: 'Telegram',
+      instagram: 'Instagram',
+      phone: 'Phone Voice AI',
+    };
     return {
       allowed: false,
       ...(await buildUpgradeMessage(
-        `${channelNames[channel] || channel} requires ${channel === 'instagram' ? 'Enterprise' : 'Pro'} plan.`,
+        `${channelNames[channel] || channel} requires ${channel === 'instagram' || channel === 'phone' ? 'Enterprise' : 'Pro'} plan.`,
         business.name,
         businessId,
         channel
