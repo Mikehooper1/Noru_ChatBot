@@ -188,7 +188,7 @@ export default function BusinessesPage() {
   const agentLimit = getAgentLimit(userPlan);
 
   return (
-    <div className="p-6">
+    <div className="page-container">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold">{isAdmin ? 'All Businesses' : 'My Chatbots'}</h2>

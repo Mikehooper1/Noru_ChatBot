@@ -26,7 +26,7 @@ export default function BroadcastPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="page-container">
       <h2 className="text-2xl font-bold mb-6">Broadcast</h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

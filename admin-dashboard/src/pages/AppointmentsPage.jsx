@@ -52,11 +52,11 @@ export default function AppointmentsPage() {
   };
 
   if (!currentBusiness) {
-    return <div className="p-6 text-gray-500">Select a chatbot to view appointments.</div>;
+    return <div className="page-container text-ink-muted dark:text-slate-400">Select a chatbot to view appointments.</div>;
   }
 
   return (
-    <div className="p-6">
+    <div className="page-container">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold">Appointments & Orders</h2>

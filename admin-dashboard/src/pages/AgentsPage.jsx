@@ -153,19 +153,19 @@ export default function AgentsPage() {
   const inactiveCount = allChats.filter((c) => getActivityStatus(c, now) === 'inactive').length;
 
   if (!currentBusiness) {
-    return <div className="p-6 text-gray-500">Select a chatbot to manage conversations.</div>;
+    return <div className="page-container text-ink-muted dark:text-slate-400">Select a chatbot to manage conversations.</div>;
   }
 
   return (
-    <div className="p-6 h-[calc(100vh-4rem)] flex flex-col">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+    <div className="page-container h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] flex flex-col">
+      <div className="page-header !mb-4">
         <div>
-          <h2 className="text-2xl font-bold">Agent Inbox</h2>
-          <p className="text-sm text-gray-500">
+          <h2 className="page-title">Agent Inbox</h2>
+          <p className="page-subtitle">
             Live status updates every 30s · Active = message in last 15 minutes
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="page-actions">
           <Button variant={tab === 'all' ? 'primary' : 'secondary'} onClick={() => setTab('all')}>
             All ({allChats.length})
           </Button>
@@ -181,18 +181,18 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex border border-gray-200 rounded-xl overflow-hidden bg-white min-h-0">
-        <div className={`${selected ? 'w-1/3' : 'w-full'} border-r border-gray-200 overflow-y-auto`}>
+      <div className="flex-1 flex flex-col md:flex-row border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800 min-h-0">
+        <div className={`${selected ? 'hidden md:block md:w-1/3' : 'w-full'} border-b md:border-b-0 md:border-r border-gray-200 dark:border-slate-700 overflow-y-auto max-h-[45vh] md:max-h-none`}>
           {loading ? (
-            <p className="p-4 text-gray-500 text-sm">Loading conversations...</p>
+            <p className="p-4 text-ink-muted dark:text-slate-400 text-sm">Loading conversations...</p>
           ) : conversations.length === 0 ? (
-            <p className="p-4 text-gray-500 text-sm">No conversations in this view.</p>
+            <p className="p-4 text-ink-muted dark:text-slate-400 text-sm">No conversations in this view.</p>
           ) : (
             conversations.map((conv) => (
               <div
                 key={conv.id}
-                className={`flex border-b border-gray-100 hover:bg-gray-50 ${
-                  selected?.id === conv.id ? 'bg-primary/5' : ''
+                className={`flex border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50 ${
+                  selected?.id === conv.id ? 'bg-primary/5 dark:bg-primary/10' : ''
                 }`}
               >
                 <button
@@ -238,7 +238,7 @@ export default function AgentsPage() {
         </div>
 
         {selected && (
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 min-h-0">
             <ConversationPanel
               conversation={selected}
               onClose={() => setSelected(null)}

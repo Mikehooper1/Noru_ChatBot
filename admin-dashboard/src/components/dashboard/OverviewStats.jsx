@@ -2,10 +2,10 @@ import Icon from '../shared/Icon';
 
 export default function OverviewStats({ stats }) {
   const cards = [
-    { label: 'Conversations Today', value: stats.totalConversations || 0, icon: 'inbox', tint: 'bg-indigo-50 text-indigo-600' },
-    { label: 'Appointments Booked', value: stats.appointmentsBooked || 0, icon: 'calendar', tint: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Messages Sent', value: stats.messagesSent || 0, icon: 'broadcast', tint: 'bg-violet-50 text-violet-600' },
-    { label: 'Handoffs', value: stats.handoffs || 0, icon: 'alert', tint: 'bg-amber-50 text-amber-600' },
+    { label: 'Conversations Today', value: stats.totalConversations || 0, icon: 'inbox', tint: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300' },
+    { label: 'Appointments Booked', value: stats.appointmentsBooked || 0, icon: 'calendar', tint: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300' },
+    { label: 'Messages Sent', value: stats.messagesSent || 0, icon: 'broadcast', tint: 'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-300' },
+    { label: 'Handoffs', value: stats.handoffs || 0, icon: 'alert', tint: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300' },
   ];
 
   return (

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
+import { LayoutProvider } from './contexts/LayoutContext';
 import { useBusiness } from './hooks/useBusiness';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
@@ -21,10 +22,10 @@ import PlansPage from './pages/PlansPage';
 
 function FullScreenLoader({ label = 'Loading your workspace…' }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-subtle">
+    <div className="min-h-screen flex items-center justify-center bg-surface-subtle dark:bg-slate-950">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-brand-gradient animate-pulse" />
-        <p className="text-ink-muted text-sm">{label}</p>
+        <p className="text-ink-muted dark:text-slate-400 text-sm">{label}</p>
       </div>
     </div>
   );
@@ -48,13 +49,15 @@ function ProtectedLayout({ children }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-surface-subtle">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
-        <main className="flex-1 overflow-auto animate-fade-in">{children}</main>
+    <LayoutProvider>
+      <div className="flex min-h-screen bg-surface-subtle dark:bg-slate-950">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-w-0 w-full">
+          <TopBar />
+          <main className="flex-1 overflow-auto animate-fade-in">{children}</main>
+        </div>
       </div>
-    </div>
+    </LayoutProvider>
   );
 }
 

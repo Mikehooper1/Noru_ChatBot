@@ -6,13 +6,13 @@ import { Input, Select, Textarea } from '../components/shared/Input';
 import { Button } from '../components/shared/Button';
 
 const STATUS_STYLES = {
-  new: 'bg-slate-100 text-slate-700',
-  contacted: 'bg-blue-100 text-blue-800',
-  interested: 'bg-green-100 text-green-800',
-  qualified: 'bg-emerald-100 text-emerald-800',
-  converted: 'bg-purple-100 text-purple-800',
-  not_interested: 'bg-red-100 text-red-800',
-  unsubscribed: 'bg-gray-200 text-gray-600',
+  new: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+  contacted: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
+  interested: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',
+  qualified: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  converted: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300',
+  not_interested: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+  unsubscribed: 'bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400',
 };
 
 const STATUS_LABELS = {
@@ -196,31 +196,32 @@ export default function LeadsPage() {
   };
 
   if (!currentBusiness) {
-    return <div className="p-6 text-gray-500">Select a chatbot to view leads.</div>;
+    return <div className="page-container text-ink-muted dark:text-slate-400">Select a chatbot to view leads.</div>;
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold">Leads & AI Outreach</h2>
-          <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+    <div className="page-container">
+      <div className="page-header">
+        <div className="min-w-0">
+          <h2 className="page-title">Leads & AI Outreach</h2>
+          <p className="page-subtitle max-w-2xl">
             Add a customer here and the AI agent will reach out on your chosen channels.
             When customers message you on WhatsApp, Telegram, website, or other channels, the same AI handles inbound chats too.
           </p>
-          <p className="text-sm text-gray-500 mt-1">
-            <strong>{currentBusiness.name}</strong> · {leads.length} leads
+          <p className="text-sm text-ink-muted dark:text-slate-400 mt-1">
+            <strong className="text-ink-soft dark:text-slate-300">{currentBusiness.name}</strong> · {leads.length} leads
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setShowSettings(true)}>Follow-up Settings</Button>
-          <Button variant="secondary" onClick={openAddLead}>Add Lead & Reach Out</Button>
-          <Button variant="secondary" onClick={exportCSV}>Export CSV</Button>
+        <div className="page-actions">
+          <Button variant="secondary" size="sm" className="sm:text-sm" onClick={() => setShowSettings(true)}>Follow-up Settings</Button>
+          <Button variant="secondary" size="sm" className="sm:text-sm" onClick={openAddLead}>Add Lead</Button>
+          <Button variant="secondary" size="sm" className="sm:text-sm" onClick={exportCSV}>Export CSV</Button>
         </div>
       </div>
 
-      <div className="flex gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
         <Select
+          className="w-full sm:max-w-xs"
           value={filters.status}
           onChange={(e) => setFilters({ ...filters, status: e.target.value })}
           options={[
@@ -231,42 +232,91 @@ export default function LeadsPage() {
       </div>
 
       {(error || actionError) && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error || actionError}</div>
+        <div className="mb-4 alert-error">{error || actionError}</div>
       )}
       {actionInfo && (
-        <div className="mb-4 p-3 bg-green-50 text-green-800 rounded-lg text-sm">{actionInfo}</div>
+        <div className="mb-4 alert-success">{actionInfo}</div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-3">
         {loading ? (
-          <p className="p-6 text-gray-500 text-sm">Loading leads...</p>
+          <p className="text-ink-muted dark:text-slate-400 text-sm">Loading leads...</p>
         ) : leads.length === 0 ? (
-          <p className="p-6 text-gray-500 text-sm">
+          <p className="text-ink-muted dark:text-slate-400 text-sm">
             No leads yet. Leads captured by the chatbot or the website form will appear here automatically.
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+          leads.map((lead) => (
+            <div key={lead.id} className="card space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium text-ink dark:text-slate-100">{lead.name || 'Unknown'}</p>
+                  <p className="text-sm text-ink-muted dark:text-slate-400 capitalize">{lead.channel || 'website'}</p>
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs flex-shrink-0 ${STATUS_STYLES[lead.status] || STATUS_STYLES.new}`}>
+                  {STATUS_LABELS[lead.status] || lead.status}
+                </span>
+              </div>
+              <div className="text-sm space-y-1">
+                <p className="text-ink-soft dark:text-slate-300">{lead.phone || '—'}</p>
+                {lead.email && <p className="text-ink-muted dark:text-slate-500 text-xs">{lead.email}</p>}
+                {lead.interest && <p className="text-ink-muted dark:text-slate-400">{lead.interest}</p>}
+                <p className="text-xs text-ink-muted dark:text-slate-500">
+                  Follow-ups: {lead.followUpCount || 0}/{lead.maxFollowUps || 3} · Next: {formatNextFollowUp(lead.nextFollowUpAt)}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1 pt-1">
+                {lead.status !== 'interested' && lead.status !== 'qualified' && lead.status !== 'converted' && (
+                  <Button variant="ghost" size="sm" onClick={() => handleStatus(lead, 'interested')}>Interested</Button>
+                )}
+                {lead.status !== 'converted' && (
+                  <Button variant="ghost" size="sm" className="text-purple-600 dark:text-purple-400" onClick={() => handleStatus(lead, 'converted')}>Converted</Button>
+                )}
+                {lead.status !== 'not_interested' && (
+                  <Button variant="ghost" size="sm" onClick={() => handleStatus(lead, 'not_interested')}>Not Interested</Button>
+                )}
+                <Button variant="ghost" size="sm" disabled={busyId === lead.id} onClick={() => handleFollowUpNow(lead)}>
+                  {busyId === lead.id ? 'Sending…' : 'Follow up'}
+                </Button>
+                <Button variant="ghost" size="sm" className="text-red-600 dark:text-red-400" onClick={() => handleDelete(lead)}>Delete</Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop table */}
+      <div className="table-shell hidden md:block">
+        {loading ? (
+          <p className="p-6 text-ink-muted dark:text-slate-400 text-sm">Loading leads...</p>
+        ) : leads.length === 0 ? (
+          <p className="p-6 text-ink-muted dark:text-slate-400 text-sm">
+            No leads yet. Leads captured by the chatbot or the website form will appear here automatically.
+          </p>
+        ) : (
+          <table className="w-full text-sm min-w-[900px]">
+            <thead className="bg-gray-50 dark:bg-slate-900/50">
               <tr>
                 {['Name', 'Contact', 'Channel', 'Interest', 'Follow-ups', 'Next Follow-up', 'Status', 'Actions'].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left font-medium text-gray-600 dark:text-slate-400 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {leads.map((lead) => (
-                <tr key={lead.id} className="border-t border-gray-100 hover:bg-gray-50 align-top">
-                  <td className="px-4 py-3">{lead.name || 'Unknown'}</td>
+                <tr key={lead.id} className="border-t border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700/50 align-top">
+                  <td className="px-4 py-3 text-ink dark:text-slate-200">{lead.name || 'Unknown'}</td>
                   <td className="px-4 py-3">
-                    <div className="text-gray-700">{lead.phone || '—'}</div>
-                    <div className="text-gray-400 text-xs">{lead.email || ''}</div>
+                    <div className="text-gray-700 dark:text-slate-300">{lead.phone || '—'}</div>
+                    <div className="text-gray-400 dark:text-slate-500 text-xs">{lead.email || ''}</div>
                   </td>
-                  <td className="px-4 py-3 capitalize">{lead.channel || 'website'}</td>
-                  <td className="px-4 py-3 max-w-[200px]">{lead.interest || '—'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{lead.followUpCount || 0}/{lead.maxFollowUps || 3}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">{formatNextFollowUp(lead.nextFollowUpAt)}</td>
+                  <td className="px-4 py-3 capitalize text-ink dark:text-slate-200">{lead.channel || 'website'}</td>
+                  <td className="px-4 py-3 max-w-[200px] text-ink dark:text-slate-300">{lead.interest || '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-ink dark:text-slate-300">{lead.followUpCount || 0}/{lead.maxFollowUps || 3}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500 dark:text-slate-400">{formatNextFollowUp(lead.nextFollowUpAt)}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs ${STATUS_STYLES[lead.status] || 'bg-slate-100 text-slate-700'}`}>
+                    <span className={`px-2 py-1 rounded-full text-xs ${STATUS_STYLES[lead.status] || STATUS_STYLES.new}`}>
                       {STATUS_LABELS[lead.status] || lead.status}
                     </span>
                   </td>
@@ -276,7 +326,7 @@ export default function LeadsPage() {
                         <Button variant="ghost" size="sm" onClick={() => handleStatus(lead, 'interested')}>Interested</Button>
                       )}
                       {lead.status !== 'converted' && (
-                        <Button variant="ghost" size="sm" className="text-purple-600" onClick={() => handleStatus(lead, 'converted')}>Converted</Button>
+                        <Button variant="ghost" size="sm" className="text-purple-600 dark:text-purple-400" onClick={() => handleStatus(lead, 'converted')}>Converted</Button>
                       )}
                       {lead.status !== 'not_interested' && (
                         <Button variant="ghost" size="sm" onClick={() => handleStatus(lead, 'not_interested')}>Not Interested</Button>
@@ -289,7 +339,7 @@ export default function LeadsPage() {
                       >
                         {busyId === lead.id ? 'Sending…' : 'Follow up now'}
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => handleDelete(lead)}>
+                      <Button variant="ghost" size="sm" className="text-red-600 dark:text-red-400 hover:text-red-700" onClick={() => handleDelete(lead)}>
                         Delete
                       </Button>
                     </div>
@@ -302,10 +352,10 @@ export default function LeadsPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold">Add lead & reach out</h3>
-            <p className="text-xs text-gray-500">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-lg space-y-4">
+            <h3 className="text-lg font-semibold text-ink dark:text-slate-100">Add lead & reach out</h3>
+            <p className="text-xs text-ink-muted dark:text-slate-400">
               Fill in contact details, pick channels, and the AI agent will send a personalized first message.
             </p>
             <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -316,10 +366,10 @@ export default function LeadsPage() {
             <Input label="Interest / what they want" value={form.interest} onChange={(e) => setForm({ ...form, interest: e.target.value })} placeholder="e.g. 3BHK in Mumbai, haircut booking, product demo" />
             <Textarea label="Notes (internal)" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Reach out via</p>
-              <div className="grid grid-cols-2 gap-2">
+              <p className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Reach out via</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {FOLLOW_UP_CHANNEL_OPTIONS.map((ch) => (
-                  <label key={ch.id} className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50">
+                  <label key={ch.id} className="flex items-center gap-2 text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 text-ink dark:text-slate-200">
                     <input
                       type="checkbox"
                       checked={(form.outreachChannels || []).includes(ch.id)}
@@ -335,7 +385,7 @@ export default function LeadsPage() {
                 ))}
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm text-ink dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={form.reachOutNow !== false}
@@ -343,10 +393,10 @@ export default function LeadsPage() {
               />
               Reach out immediately with AI message
             </label>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-ink-muted dark:text-slate-400">
               Enable matching channels under Channels first. Instagram DMs only work if the customer messaged you before (Meta policy).
             </p>
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-wrap gap-2 justify-end">
               <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
               <Button disabled={creating} onClick={handleCreate}>{creating ? 'Saving…' : 'Save & reach out'}</Button>
             </div>
@@ -355,10 +405,10 @@ export default function LeadsPage() {
       )}
 
       {showSettings && config && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
-            <h3 className="text-lg font-semibold">Follow-up Settings</h3>
-            <label className="flex items-center gap-2 text-sm">
+        <div className="modal-overlay">
+          <div className="modal-panel max-w-md space-y-4">
+            <h3 className="text-lg font-semibold text-ink dark:text-slate-100">Follow-up Settings</h3>
+            <label className="flex items-center gap-2 text-sm text-ink dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={config.enabled !== false}
@@ -380,10 +430,10 @@ export default function LeadsPage() {
               onChange={(e) => setConfig({ ...config, followUpOffsetsHours: e.target.value })}
             />
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Contact leads via</p>
-              <div className="grid grid-cols-2 gap-2">
+              <p className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Contact leads via</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {FOLLOW_UP_CHANNEL_OPTIONS.map((ch) => (
-                  <label key={ch.id} className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50">
+                  <label key={ch.id} className="flex items-center gap-2 text-sm border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 text-ink dark:text-slate-200">
                     <input
                       type="checkbox"
                       checked={(config.followUpChannels || []).includes(ch.id)}
@@ -398,7 +448,7 @@ export default function LeadsPage() {
                   </label>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="text-xs text-ink-muted dark:text-slate-400 mt-2">
                 The chatbot sends each follow-up on every selected channel where the lead has contact details and the channel is enabled in Channels.
               </p>
             </div>
@@ -408,7 +458,7 @@ export default function LeadsPage() {
               value={config.instructions || ''}
               onChange={(e) => setConfig({ ...config, instructions: e.target.value })}
             />
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-sm text-ink dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={config.notifyAdmin !== false}
@@ -416,10 +466,10 @@ export default function LeadsPage() {
               />
               Notify admin on WhatsApp when a new lead is captured
             </label>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-ink-muted dark:text-slate-400">
               Default channels for all leads. Enable WhatsApp, Telegram, Email, Phone, and Instagram under Channels. Automatic follow-ups require Pro+.
             </p>
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-wrap gap-2 justify-end">
               <Button variant="ghost" onClick={() => setShowSettings(false)}>Cancel</Button>
               <Button disabled={savingConfig} onClick={handleSaveConfig}>{savingConfig ? 'Saving…' : 'Save Settings'}</Button>
             </div>

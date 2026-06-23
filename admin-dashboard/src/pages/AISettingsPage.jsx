@@ -30,14 +30,14 @@ export default function AISettingsPage() {
 
   if (!currentBusiness) {
     return (
-      <div className="p-6">
+      <div className="page-container">
         <p className="text-ink-muted">Select or create a chatbot first.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="page-container">
       <div className="mb-6">
         <h2 className="page-title">AI Settings</h2>
         <p className="page-subtitle">

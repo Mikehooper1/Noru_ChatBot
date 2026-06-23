@@ -1,6 +1,6 @@
 export function Card({ children, className = '', ...props }) {
   return (
-    <div className={`card p-5 ${className}`} {...props}>
+    <div className={`card p-4 sm:p-5 ${className}`} {...props}>
       {children}
     </div>
   );
@@ -8,11 +8,11 @@ export function Card({ children, className = '', ...props }) {
 
 export function Badge({ children, color = 'gray', className = '' }) {
   const colors = {
-    gray: 'bg-slate-100 text-slate-600',
-    green: 'bg-emerald-100 text-emerald-700',
-    red: 'bg-red-100 text-red-700',
-    amber: 'bg-amber-100 text-amber-700',
-    primary: 'bg-primary-50 text-primary-dark',
+    gray: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+    green: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+    red: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+    primary: 'bg-primary-50 text-primary-dark dark:bg-primary/20 dark:text-primary-light',
   };
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full ${colors[color]} ${className}`}>
@@ -32,14 +32,14 @@ export function Spinner({ className = 'w-5 h-5' }) {
 
 export function EmptyState({ icon = null, title, description, action = null }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-14 px-6">
+    <div className="flex flex-col items-center justify-center text-center py-10 sm:py-14 px-4 sm:px-6">
       {icon && (
-        <div className="w-12 h-12 rounded-2xl bg-primary-50 text-primary flex items-center justify-center mb-4">
+        <div className="w-12 h-12 rounded-2xl bg-primary-50 dark:bg-primary/20 text-primary flex items-center justify-center mb-4">
           {icon}
         </div>
       )}
-      <h3 className="text-base font-semibold text-ink">{title}</h3>
-      {description && <p className="text-sm text-ink-muted mt-1 max-w-sm">{description}</p>}
+      <h3 className="text-base font-semibold text-ink dark:text-slate-100">{title}</h3>
+      {description && <p className="text-sm text-ink-muted dark:text-slate-400 mt-1 max-w-sm">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>
   );

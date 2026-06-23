@@ -9,20 +9,43 @@
   }
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: #F8FAFC;
-    color: #0F172A;
+    @apply bg-surface-subtle text-ink dark:bg-slate-950 dark:text-slate-100;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-2xl border border-slate-200/70 shadow-soft;
+    @apply bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/70 dark:border-slate-700 shadow-soft;
   }
   .page-title {
-    @apply text-2xl font-bold text-ink tracking-tight;
+    @apply text-xl sm:text-2xl font-bold text-ink dark:text-slate-100 tracking-tight;
   }
   .page-subtitle {
-    @apply text-sm text-ink-muted mt-1;
+    @apply text-sm text-ink-muted dark:text-slate-400 mt-1;
+  }
+  .page-container {
+    @apply p-4 sm:p-5 lg:p-6 max-w-7xl mx-auto w-full;
+  }
+  .page-header {
+    @apply flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6;
+  }
+  .page-actions {
+    @apply flex flex-wrap gap-2 w-full sm:w-auto;
+  }
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4;
+  }
+  .modal-panel {
+    @apply bg-white dark:bg-slate-800 rounded-xl p-5 sm:p-6 w-full max-h-[90vh] overflow-y-auto border border-transparent dark:border-slate-700;
+  }
+  .table-shell {
+    @apply bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-x-auto;
+  }
+  .alert-error {
+    @apply p-3 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 rounded-lg text-sm;
+  }
+  .alert-success {
+    @apply p-3 bg-green-50 dark:bg-green-950/50 text-green-800 dark:text-green-300 rounded-lg text-sm;
   }
 }
 
@@ -42,5 +65,13 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
+  background-clip: content-box;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  background-clip: content-box;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
   background-clip: content-box;
 }

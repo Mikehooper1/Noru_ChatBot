@@ -4,6 +4,7 @@ import { loginWithEmail, registerWithEmail, loginWithGoogle } from '../firebase/
 import { Input } from '../components/shared/Input';
 import { Button } from '../components/shared/Button';
 import Icon from '../components/shared/Icon';
+import ThemeToggle from '../components/shared/ThemeToggle';
 import { PLANS } from '../constants/plans';
 
 export default function BusinessLanding() {
@@ -46,7 +47,10 @@ export default function BusinessLanding() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-surface-subtle">
+    <div className="min-h-screen grid lg:grid-cols-2 bg-surface-subtle dark:bg-slate-950 relative">
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
       {/* Marketing / hero */}
       <div className="hidden lg:flex flex-col justify-between bg-brand-gradient text-white p-12">
         <div className="flex items-center gap-3">
@@ -91,23 +95,23 @@ export default function BusinessLanding() {
       </div>
 
       {/* Auth card */}
-      <div className="flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-card border border-slate-200/70 p-8 w-full max-w-md">
+      <div className="flex items-center justify-center p-4 sm:p-6">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card border border-slate-200/70 dark:border-slate-700 p-6 sm:p-8 w-full max-w-md">
           <div className="text-center mb-6">
             <div className="lg:hidden w-12 h-12 mx-auto mb-3 rounded-xl bg-brand-gradient flex items-center justify-center">
               <Icon name="bot" className="w-7 h-7 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-ink">
+            <h1 className="text-xl sm:text-2xl font-bold text-ink dark:text-slate-100">
               {mode === 'register' ? 'Create your business account' : 'Welcome back'}
             </h1>
-            <p className="text-ink-muted mt-1">
+            <p className="text-ink-muted dark:text-slate-400 mt-1">
               {mode === 'register'
                 ? 'Onboard your business and go live with your AI agent.'
                 : 'Sign in to manage your AI chatbot.'}
             </p>
           </div>
 
-          <div className="flex p-1 bg-slate-100 rounded-xl mb-6">
+          <div className="flex p-1 bg-slate-100 dark:bg-slate-700 rounded-xl mb-6">
             {[
               { id: 'register', label: 'Register' },
               { id: 'login', label: 'Sign In' },
@@ -120,7 +124,7 @@ export default function BusinessLanding() {
                   setError('');
                 }}
                 className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                  mode === t.id ? 'bg-white shadow text-ink' : 'text-ink-muted'
+                  mode === t.id ? 'bg-white dark:bg-slate-600 shadow text-ink dark:text-slate-100' : 'text-ink-muted dark:text-slate-400'
                 }`}
               >
                 {t.label}
@@ -128,7 +132,7 @@ export default function BusinessLanding() {
             ))}
           </div>
 
-          {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+          {error && <div className="mb-4 alert-error">{error}</div>}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
@@ -153,16 +157,16 @@ export default function BusinessLanding() {
           </form>
 
           <div className="my-4 flex items-center gap-3">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400">OR</span>
-            <div className="flex-1 h-px bg-gray-200" />
+            <div className="flex-1 h-px bg-gray-200 dark:bg-slate-600" />
+            <span className="text-xs text-gray-400 dark:text-slate-500">OR</span>
+            <div className="flex-1 h-px bg-gray-200 dark:bg-slate-600" />
           </div>
 
           <Button variant="secondary" className="w-full" onClick={handleGoogle} disabled={loading}>
             Continue with Google
           </Button>
 
-          <p className="text-center text-xs text-ink-muted mt-6">
+          <p className="text-center text-xs text-ink-muted dark:text-slate-400 mt-6">
             Platform administrator?{' '}
             <Link to="/admin/login" className="text-primary font-medium hover:underline">
               Admin sign in

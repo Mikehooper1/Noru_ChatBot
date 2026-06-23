@@ -52,13 +52,13 @@ export default function FlowsPage() {
   };
 
   if (!currentBusiness) {
-    return <div className="p-6 text-gray-500">Select a chatbot to manage flows.</div>;
+    return <div className="page-container text-ink-muted dark:text-slate-400">Select a chatbot to manage flows.</div>;
   }
 
-  if (loading) return <div className="p-6">Loading flows...</div>;
+  if (loading) return <div className="page-container">Loading flows...</div>;
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="page-container space-y-6 lg:space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Flow Builder</h2>
