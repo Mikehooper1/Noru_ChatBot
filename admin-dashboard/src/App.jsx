@@ -12,6 +12,7 @@ import ServicesPage from './pages/ServicesPage';
 import ChannelsPage from './pages/ChannelsPage';
 import AISettingsPage from './pages/AISettingsPage';
 import AppointmentsPage from './pages/AppointmentsPage';
+import LeadsPage from './pages/LeadsPage';
 import BroadcastPage from './pages/BroadcastPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import AgentsPage from './pages/AgentsPage';
@@ -87,6 +88,7 @@ export default function App() {
       <Route path="/channels" element={<ProtectedLayout><ChannelsPage /></ProtectedLayout>} />
       <Route path="/ai-settings" element={<ProtectedLayout><AISettingsPage /></ProtectedLayout>} />
       <Route path="/appointments" element={<ProtectedLayout><AppointmentsPage /></ProtectedLayout>} />
+      <Route path="/leads" element={<ProtectedLayout><LeadsPage /></ProtectedLayout>} />
       <Route path="/broadcast" element={<ProtectedLayout><BroadcastPage /></ProtectedLayout>} />
       <Route path="/analytics" element={<ProtectedLayout><AnalyticsPage /></ProtectedLayout>} />
       <Route path="*" element={<Navigate to="/" replace />} />

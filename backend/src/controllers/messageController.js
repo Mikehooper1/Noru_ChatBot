@@ -12,6 +12,8 @@ const {
 const { trackEvent } = require('../services/analyticsService');
 const { getBusinessByPhoneNumberId, getBusiness, logError } = require('../firebase/admin');
 const { sanitizeInput } = require('../utils/sanitize');
+const { detectLeadIntent } = require('../services/conversationActionService');
+const leadService = require('../services/leadService');
 const {
   checkPlanAccess,
   incrementUsage,
@@ -27,6 +29,31 @@ async function buildWelcomeMessage(conversation, businessId) {
     return `Hi ${name}! ${welcome}`;
   }
   return welcome;
+}
+
+// Applies a keyword-based intent fallback to inbound replies from a known
+// lead. Runs in the background so it never delays the bot's reply. The AI's
+// own ACTION:LEAD_STATUS tags remain the primary signal; this only fires when
+// an existing open lead matches the conversation.
+async function applyLeadIntent(businessId, conversation, userMessage) {
+  try {
+    const intent = detectLeadIntent(userMessage);
+    if (!intent) return;
+    const lead = await leadService.findLeadForConversation(businessId, conversation);
+    if (!lead) return;
+    if (leadService.CLOSED_STATUSES.includes(lead.status)) return;
+
+    if (intent === 'interested') {
+      await leadService.markLeadInterested(lead.id, { status: 'interested' });
+      await leadService.notifyAdminNewLead(businessId, { ...lead, status: 'interested' }).catch(() => {});
+    } else if (intent === 'not_interested') {
+      await leadService.updateLeadStatus(lead.id, 'not_interested');
+    } else if (intent === 'unsubscribed') {
+      await leadService.updateLeadStatus(lead.id, 'unsubscribed');
+    }
+  } catch (error) {
+    console.warn('[Leads] applyLeadIntent failed:', error.message);
+  }
 }
 
 async function processIncomingMessage({ businessId, channel, userId, userMessage, userData = {}, skipWelcome = false }) {
@@ -73,6 +100,8 @@ async function processIncomingMessage({ businessId, channel, userId, userMessage
     await SessionManager.saveMessage(conversation.id, 'user', userMessage);
     await incrementUsage(businessId, 'messages');
     await trackEvent(businessId, channel, 'message_received');
+
+    setImmediate(() => applyLeadIntent(businessId, conversation, userMessage));
 
     const engine = new FlowEngine(businessId, conversation.id);
     const result = await engine.processMessage(userMessage);
@@ -248,6 +277,31 @@ async function handleWidgetStart({ businessId, sessionId, userName, userPhone })
   const flowQuickReplies = engine.buildFlowMenu(flows);
 
   const session = await sendSessionWelcome(conversation, businessId, flowQuickReplies);
+
+  // "Leads from the front": when the visitor provided contact details in the
+  // pre-chat form, persist them as a lead so follow-ups can be scheduled.
+  if ((userPhone && userPhone.trim()) || (userName && userName.trim() && userName !== 'Visitor')) {
+    setImmediate(async () => {
+      try {
+        const business = await getBusiness(businessId);
+        const lead = await leadService.upsertLead({
+          businessId,
+          conversationId: conversation.id,
+          channel: 'website',
+          userId,
+          name: userName && userName !== 'Visitor' ? userName : '',
+          phone: userPhone || '',
+          source: 'widget_form',
+          businessType: business?.type || '',
+        });
+        if (lead && lead._isNew) {
+          await leadService.notifyAdminNewLead(businessId, lead).catch(() => {});
+        }
+      } catch (error) {
+        console.warn('[Leads] widget start capture failed:', error.message);
+      }
+    });
+  }
 
   return {
     sessionId: userId,

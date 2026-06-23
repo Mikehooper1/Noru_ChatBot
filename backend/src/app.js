@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { initFirebase, logError } = require('./firebase/admin');
 const { startReminderCron } = require('./services/reminderService');
+const { startLeadFollowUpCron } = require('./services/leadFollowUpService');
 
 const whatsappRoutes = require('./routes/whatsapp');
 const telegramRoutes = require('./routes/telegram');
@@ -12,6 +13,7 @@ const broadcastRoutes = require('./routes/broadcast');
 const adminRoutes = require('./routes/admin');
 const paymentRoutes = require('./routes/payments');
 const phoneRoutes = require('./routes/phone');
+const leadRoutes = require('./routes/leads');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +53,7 @@ app.use(broadcastRoutes);
 app.use(adminRoutes);
 app.use(paymentRoutes);
 app.use(phoneRoutes);
+app.use(leadRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error:', err);
@@ -60,6 +63,7 @@ app.use((err, _req, res, _next) => {
 
 if (process.env.NODE_ENV !== 'test') {
   startReminderCron();
+  startLeadFollowUpCron();
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });

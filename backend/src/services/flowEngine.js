@@ -264,6 +264,7 @@ class FlowEngine {
         businessId: this.businessId,
         conversationId: this.conversationId,
         conv,
+        businessType,
       });
 
       for (const result of results) {

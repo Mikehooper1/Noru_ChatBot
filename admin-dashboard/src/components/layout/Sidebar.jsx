@@ -22,6 +22,7 @@ const navSections = [
   {
     title: 'Grow',
     items: [
+      { to: '/leads', label: 'Leads', icon: 'leads' },
       { to: '/appointments', label: 'Appointments', icon: 'calendar' },
       { to: '/broadcast', label: 'Broadcast', icon: 'broadcast' },
       { to: '/analytics', label: 'Analytics', icon: 'analytics' },

@@ -3,8 +3,9 @@ const { getDb, getFieldValue } = require('../firebase/admin');
 const { isHealthBusiness } = require('./clinicQuestionService');
 const { trackEvent } = require('./analyticsService');
 const { notifyAdminNewBooking } = require('./appointmentNotificationService');
+const leadService = require('./leadService');
 
-const ACTION_REGEX = /ACTION:(BOOK_APPOINTMENT|CREATE_ORDER|UPDATE_APPOINTMENT|CANCEL_APPOINTMENT)\|(\{[^}]+\})/gi;
+const ACTION_REGEX = /ACTION:(BOOK_APPOINTMENT|CREATE_ORDER|UPDATE_APPOINTMENT|CANCEL_APPOINTMENT|CAPTURE_LEAD|LEAD_STATUS)\|(\{[^}]+\})/gi;
 
 const RECALL_PATTERN =
   /\bmy\s+(appointments?|bookings?|orders?|deliveries)\b|\b(show|view|check|see|find|lookup|track|recall|list)\s+(my\s+)?(appointments?|bookings?|orders?|deliveries?)\b|\bwhat('s| is)\s+my\s+(appointment|booking|order)\b|\b(track my order|my deliveries|my bookings|my appointments)\b/i;
@@ -80,6 +81,21 @@ function isTimeOnlyInput(message) {
 
 function detectBookIntent(message) {
   return BOOK_INTENT_PATTERN.test((message || '').trim());
+}
+
+const LEAD_STOP_PATTERN = /\b(unsubscribe|stop messaging|stop contacting|do not contact|don'?t contact|remove me|leave me alone)\b|^stop$/i;
+const LEAD_NEGATIVE_PATTERN = /\b(not interested|no longer interested|no thanks|no thank you|not looking|already (bought|purchased|sorted)|please stop)\b/i;
+const LEAD_POSITIVE_PATTERN = /\b(i'?m interested|am interested|interested|call me|contact me|send (me )?(the )?(details|info|brochure|price|quote)|sounds good|let'?s (proceed|do it|go ahead)|book me|sign me up|yes please|tell me more|want to (buy|purchase|proceed))\b/i;
+
+// Lightweight fallback intent classifier for inbound lead replies. Returns
+// one of 'interested' | 'not_interested' | 'unsubscribed' | null.
+function detectLeadIntent(message) {
+  const text = (message || '').trim();
+  if (!text) return null;
+  if (LEAD_STOP_PATTERN.test(text)) return 'unsubscribed';
+  if (LEAD_NEGATIVE_PATTERN.test(text)) return 'not_interested';
+  if (LEAD_POSITIVE_PATTERN.test(text)) return 'interested';
+  return null;
 }
 
 function detectRecallIntent(message) {
@@ -558,10 +574,54 @@ function parseAIActions(aiReply) {
   return { cleanReply, actions };
 }
 
-async function executeAIActions(actions, { businessId, conversationId, conv }) {
+async function executeAIActions(actions, { businessId, conversationId, conv, businessType = '' }) {
   const results = [];
 
   for (const action of actions) {
+    if (action.type === 'CAPTURE_LEAD') {
+      try {
+        const { name, phone, email, interest, notes } = action.data;
+        const lead = await leadService.upsertLead({
+          businessId,
+          conversationId,
+          channel: conv?.channel || 'website',
+          userId: conv?.userId || '',
+          name: name || conv?.userName || '',
+          phone: phone || conv?.userPhone || '',
+          email: email || '',
+          interest: interest || '',
+          notes: notes || '',
+          source: 'chat_ai',
+          businessType,
+        });
+        if (lead && lead._isNew) {
+          await leadService.notifyAdminNewLead(businessId, lead).catch(() => {});
+        }
+        results.push({ type: 'lead', record: lead });
+      } catch (error) {
+        console.warn('[Leads] CAPTURE_LEAD failed:', error.message);
+      }
+      continue;
+    }
+
+    if (action.type === 'LEAD_STATUS') {
+      try {
+        const status = String(action.data.status || '').toLowerCase();
+        const lead = await leadService.findLeadForConversation(businessId, conv);
+        if (lead) {
+          if (status === 'interested' || status === 'qualified') {
+            await leadService.markLeadInterested(lead.id, { status });
+          } else if (['not_interested', 'unsubscribed', 'converted'].includes(status)) {
+            await leadService.updateLeadStatus(lead.id, status);
+          }
+          results.push({ type: 'lead_status', record: { ...lead, status } });
+        }
+      } catch (error) {
+        console.warn('[Leads] LEAD_STATUS failed:', error.message);
+      }
+      continue;
+    }
+
     if (action.type === 'BOOK_APPOINTMENT') {
       const { serviceName, date, time, notes } = action.data;
       if (!date) continue;
@@ -636,6 +696,7 @@ async function saveFlowOrder(conv, flow, session) {
 module.exports = {
   resolveSessionKey,
   detectBookIntent,
+  detectLeadIntent,
   detectRecallIntent,
   detectModifyIntent,
   detectCancelIntent,

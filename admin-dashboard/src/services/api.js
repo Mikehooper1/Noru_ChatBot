@@ -80,6 +80,22 @@ export const api = {
     request(`/api/conversations/${id}/resolve`, { method: 'POST' }),
   deleteConversation: (id) =>
     request(`/api/conversations/${id}`, { method: 'DELETE' }),
+  getLeads: (businessId, params = {}) => {
+    const qs = new URLSearchParams({ businessId, ...params }).toString();
+    return request(`/api/leads?${qs}`);
+  },
+  createLead: (data) =>
+    request('/api/leads', { method: 'POST', body: JSON.stringify(data) }),
+  updateLead: (id, data) =>
+    request(`/api/leads/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteLead: (id) =>
+    request(`/api/leads/${id}`, { method: 'DELETE' }),
+  sendLeadFollowUp: (id) =>
+    request(`/api/leads/${id}/followup`, { method: 'POST' }),
+  getLeadConfig: (businessId) =>
+    request(`/api/lead-config?businessId=${encodeURIComponent(businessId)}`),
+  saveLeadConfig: (data) =>
+    request('/api/lead-config', { method: 'PUT', body: JSON.stringify(data) }),
   getPlans: () => fetch(`${BASE_URL}/api/plans`).then(parseJsonSafe),
   createPaymentOrder: (planId) =>
     request('/api/payments/create-order', {
