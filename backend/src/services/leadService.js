@@ -11,9 +11,21 @@ const DEFAULT_LEAD_CONFIG = {
   maxFollowUps: 3,
   // Escalating cadence: 1st nudge +1 day, 2nd +3 days, 3rd +7 days.
   followUpOffsetsHours: [24, 72, 168],
+  // Channels the chatbot may use to proactively contact leads (user-selected in admin).
+  followUpChannels: ['whatsapp', 'telegram', 'email', 'phone', 'instagram', 'website'],
   instructions: '',
   notifyAdmin: true,
 };
+
+const VALID_FOLLOW_UP_CHANNELS = ['whatsapp', 'telegram', 'email', 'phone', 'instagram', 'website'];
+
+function normalizeFollowUpChannels(channels) {
+  const list = Array.isArray(channels) ? channels : String(channels || '').split(',');
+  const normalized = list
+    .map((c) => String(c).trim().toLowerCase())
+    .filter((c) => VALID_FOLLOW_UP_CHANNELS.includes(c));
+  return normalized.length ? [...new Set(normalized)] : [...DEFAULT_LEAD_CONFIG.followUpChannels];
+}
 
 function normalizePhone(phone) {
   return String(phone || '').replace(/\D/g, '');
@@ -43,6 +55,7 @@ async function getLeadConfig(businessId) {
       enabled: data.enabled !== false,
       maxFollowUps: Number.isFinite(data.maxFollowUps) ? data.maxFollowUps : DEFAULT_LEAD_CONFIG.maxFollowUps,
       followUpOffsetsHours: offsets,
+      followUpChannels: normalizeFollowUpChannels(data.followUpChannels),
       instructions: data.instructions || '',
       notifyAdmin: data.notifyAdmin !== false,
     };
@@ -66,6 +79,7 @@ async function saveLeadConfig(businessId, body = {}) {
     enabled: body.enabled !== false,
     maxFollowUps: Number.isFinite(maxFollowUps) && maxFollowUps > 0 ? maxFollowUps : DEFAULT_LEAD_CONFIG.maxFollowUps,
     followUpOffsetsHours: offsets.length ? offsets : DEFAULT_LEAD_CONFIG.followUpOffsetsHours,
+    followUpChannels: normalizeFollowUpChannels(body.followUpChannels),
     instructions: body.instructions || '',
     notifyAdmin: body.notifyAdmin !== false,
     updatedAt: getFieldValue().serverTimestamp(),
@@ -87,11 +101,12 @@ function computeNextFollowUpAt(nextAttemptIndex, offsetsHours) {
   return admin.firestore.Timestamp.fromDate(when);
 }
 
-async function findExistingLead(businessId, { conversationId, userId, phone, email }) {
+async function findExistingLead(businessId, { conversationId, userId, phone, email, instagramUserId }) {
   const db = getDb();
   const snap = await db.collection('leads').where('businessId', '==', businessId).get();
   const phoneN = normalizePhone(phone);
   const emailN = normalizeEmail(email);
+  const igId = String(instagramUserId || '').trim();
 
   const match = snap.docs.find((d) => {
     const data = d.data();
@@ -99,6 +114,7 @@ async function findExistingLead(businessId, { conversationId, userId, phone, ema
     if (userId && data.userId && data.userId === userId) return true;
     if (phoneN && normalizePhone(data.phone) && normalizePhone(data.phone) === phoneN) return true;
     if (emailN && normalizeEmail(data.email) && normalizeEmail(data.email) === emailN) return true;
+    if (igId && data.instagramUserId && data.instagramUserId === igId) return true;
     return false;
   });
 
@@ -113,14 +129,19 @@ async function createLead({
   name = '',
   phone = '',
   email = '',
+  instagramUserId = '',
   interest = '',
   notes = '',
   source = 'manual',
   businessType = '',
   status = 'new',
+  outreachChannels = null,
 }) {
   const config = await getLeadConfig(businessId);
   const leadId = uuidv4();
+  const channels = outreachChannels?.length
+    ? normalizeFollowUpChannels(outreachChannels)
+    : config.followUpChannels;
   const nextFollowUpAt = config.enabled && OPEN_STATUSES.includes(status)
     ? computeNextFollowUpAt(0, config.followUpOffsetsHours)
     : null;
@@ -133,12 +154,15 @@ async function createLead({
     name: name || '',
     phone: phone || '',
     email: email || '',
+    instagramUserId: instagramUserId || '',
     interest: interest || '',
     notes: notes || '',
     status,
     followUpCount: 0,
     maxFollowUps: config.maxFollowUps,
     followUpOffsetsHours: config.followUpOffsetsHours,
+    followUpChannels: channels,
+    outreachChannels: channels,
     nextFollowUpAt,
     lastContactedAt: null,
     followUpHistory: [],
@@ -163,12 +187,20 @@ async function upsertLead({
   name,
   phone,
   email,
+  instagramUserId,
   interest,
   notes,
   source = 'chat_ai',
   businessType = '',
+  outreachChannels = null,
 }) {
-  const existing = await findExistingLead(businessId, { conversationId, userId, phone, email });
+  const existing = await findExistingLead(businessId, {
+    conversationId,
+    userId,
+    phone,
+    email,
+    instagramUserId,
+  });
 
   if (!existing) {
     return createLead({
@@ -179,10 +211,12 @@ async function upsertLead({
       name,
       phone,
       email,
+      instagramUserId,
       interest,
       notes,
       source,
       businessType,
+      outreachChannels,
     });
   }
 
@@ -190,6 +224,7 @@ async function upsertLead({
   if (name && !existing.name) updates.name = name;
   if (phone && !normalizePhone(existing.phone)) updates.phone = phone;
   if (email && !normalizeEmail(existing.email)) updates.email = email;
+  if (instagramUserId && !existing.instagramUserId) updates.instagramUserId = instagramUserId;
   if (interest && interest !== existing.interest) updates.interest = interest;
   if (notes && notes !== existing.notes) updates.notes = notes;
   if (channel && !existing.channel) updates.channel = channel;
@@ -223,29 +258,38 @@ async function markLeadInterested(leadId, { status = 'interested' } = {}) {
   return updateLeadStatus(leadId, status, { nextFollowUpAt: null });
 }
 
-// Records a sent follow-up attempt and schedules the next one (or marks the
-// lead not interested once the configured attempts are exhausted).
-async function recordFollowUpSent(lead, { channel, message }) {
+// Records one follow-up attempt across one or more channels and schedules the
+// next attempt (or marks the lead not interested once attempts are exhausted).
+async function recordFollowUpSent(lead, { channels = [], channel, message }) {
+  const sentChannels = channels.length ? channels : channel ? [channel] : [];
   const newCount = (lead.followUpCount || 0) + 1;
   const offsets = lead.followUpOffsetsHours || DEFAULT_LEAD_CONFIG.followUpOffsetsHours;
   const maxFollowUps = lead.maxFollowUps || DEFAULT_LEAD_CONFIG.maxFollowUps;
+  const now = admin.firestore.Timestamp.now();
+  const msg = String(message || '').slice(0, 1000);
 
-  const historyEntry = {
-    at: admin.firestore.Timestamp.now(),
-    channel,
-    message: String(message || '').slice(0, 1000),
-  };
+  const historyEntries = sentChannels.map((ch) => ({
+    at: now,
+    channel: ch,
+    message: msg,
+  }));
 
   const payload = {
     followUpCount: newCount,
     status: 'contacted',
     lastContactedAt: getFieldValue().serverTimestamp(),
-    followUpHistory: getFieldValue().arrayUnion(historyEntry),
     updatedAt: getFieldValue().serverTimestamp(),
   };
 
+  if (historyEntries.length === 1) {
+    payload.followUpHistory = getFieldValue().arrayUnion(historyEntries[0]);
+  } else if (historyEntries.length > 1) {
+    // Firestore arrayUnion accepts only one value per call — batch via read-modify-write
+    const existing = Array.isArray(lead.followUpHistory) ? lead.followUpHistory : [];
+    payload.followUpHistory = [...existing, ...historyEntries];
+  }
+
   if (newCount >= maxFollowUps) {
-    // Out of attempts — no positive response was registered.
     payload.status = 'not_interested';
     payload.nextFollowUpAt = null;
   } else {
@@ -262,6 +306,7 @@ async function findLeadForConversation(businessId, conv) {
     conversationId: conv.id,
     userId: conv.userId,
     phone: conv.userPhone,
+    instagramUserId: conv.channel === 'instagram' ? conv.userId : '',
   });
 }
 
@@ -302,6 +347,8 @@ module.exports = {
   OPEN_STATUSES,
   CLOSED_STATUSES,
   DEFAULT_LEAD_CONFIG,
+  VALID_FOLLOW_UP_CHANNELS,
+  normalizeFollowUpChannels,
   normalizePhone,
   normalizeEmail,
   getLeadConfig,

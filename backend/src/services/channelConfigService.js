@@ -138,10 +138,92 @@ async function savePhoneConfig(businessId, body) {
   return getPhoneConfigForAdmin(businessId);
 }
 
+async function getEmailConfigForAdmin(businessId) {
+  const raw = await getRawChannelDoc(businessId, 'email');
+  if (!raw) {
+    return {
+      enabled: false,
+      smtpHost: '',
+      smtpPort: 587,
+      smtpUser: '',
+      fromEmail: '',
+      replyTo: '',
+      smtpPassConfigured: false,
+      usePlatformSmtp: true,
+    };
+  }
+
+  const { smtpPass, ...safe } = raw;
+  return {
+    ...safe,
+    enabled: safe.enabled === true,
+    smtpHost: safe.smtpHost || '',
+    smtpPort: safe.smtpPort || 587,
+    smtpUser: safe.smtpUser || '',
+    fromEmail: safe.fromEmail || '',
+    replyTo: safe.replyTo || '',
+    usePlatformSmtp: safe.usePlatformSmtp !== false,
+    smtpPassConfigured: Boolean(smtpPass && String(smtpPass).length > 3),
+  };
+}
+
+async function saveEmailConfig(businessId, body) {
+  const { clearBusinessTransporter } = require('./emailService');
+  const ref = getDb().collection('businesses').doc(businessId).collection('channels').doc('email');
+  const existing = (await ref.get()).data() || {};
+
+  const payload = {
+    smtpHost: String(body.smtpHost ?? existing.smtpHost ?? '').trim(),
+    smtpPort: Number(body.smtpPort ?? existing.smtpPort ?? 587) || 587,
+    smtpUser: String(body.smtpUser ?? existing.smtpUser ?? '').trim(),
+    fromEmail: String(body.fromEmail ?? existing.fromEmail ?? '').trim(),
+    replyTo: String(body.replyTo ?? existing.replyTo ?? '').trim(),
+    usePlatformSmtp: body.usePlatformSmtp !== false,
+    updatedAt: getFieldValue().serverTimestamp(),
+  };
+
+  if (body.enabled !== undefined) {
+    payload.enabled = body.enabled === true;
+  } else {
+    payload.enabled = existing.enabled === true;
+  }
+
+  const newPass = String(body.smtpPass || '').trim();
+  if (newPass) {
+    payload.smtpPass = encrypt(newPass);
+  } else if (existing.smtpPass) {
+    payload.smtpPass = existing.smtpPass;
+  }
+
+  await ref.set(payload, { merge: true });
+  clearBusinessTransporter(businessId);
+  return getEmailConfigForAdmin(businessId);
+}
+
+async function verifyEmailConfig(businessId) {
+  const config = await getChannelConfig(businessId, 'email');
+  if (!config?.enabled) {
+    return { ok: false, error: 'Email channel is not enabled' };
+  }
+  if (config.smtpHost && config.smtpUser && config.smtpPass) {
+    return { ok: true, mode: 'business' };
+  }
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    return { ok: true, mode: 'platform' };
+  }
+  return {
+    ok: false,
+    error: 'Add SMTP credentials in Channels → Email, or set SMTP_* env vars on the server',
+  };
+}
+
 module.exports = {
   getWhatsAppConfigForAdmin,
   saveWhatsAppConfig,
   verifyWhatsAppConfig,
   getPhoneConfigForAdmin,
   savePhoneConfig,
+  getEmailConfigForAdmin,
+  saveEmailConfig,
+  verifyEmailConfig,
 };

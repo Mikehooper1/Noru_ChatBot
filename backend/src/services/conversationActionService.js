@@ -580,7 +580,7 @@ async function executeAIActions(actions, { businessId, conversationId, conv, bus
   for (const action of actions) {
     if (action.type === 'CAPTURE_LEAD') {
       try {
-        const { name, phone, email, interest, notes } = action.data;
+        const { name, phone, email, instagramUserId, interest, notes } = action.data;
         const lead = await leadService.upsertLead({
           businessId,
           conversationId,
@@ -589,6 +589,7 @@ async function executeAIActions(actions, { businessId, conversationId, conv, bus
           name: name || conv?.userName || '',
           phone: phone || conv?.userPhone || '',
           email: email || '',
+          instagramUserId: instagramUserId || (conv?.channel === 'instagram' ? conv?.userId : ''),
           interest: interest || '',
           notes: notes || '',
           source: 'chat_ai',

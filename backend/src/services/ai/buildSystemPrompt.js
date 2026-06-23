@@ -34,8 +34,8 @@ Rules:
   ACTION:BOOK_APPOINTMENT|{"serviceName":"...","date":"DD-MM-YYYY","time":"HH:MM","notes":"..."}
 - When you take or confirm a customer order, append this exact line at the end:
   ACTION:CREATE_ORDER|{"serviceName":"...","orderNumber":"ORD-...","items":"...","notes":"..."}
-- LEAD GENERATION: When a new prospect shares contact details (name, phone, or email) and what they are looking for, capture them as a lead by appending:
-  ACTION:CAPTURE_LEAD|{"name":"...","phone":"...","email":"...","interest":"what they want","notes":"..."}
+- LEAD GENERATION: When a new prospect shares contact details (name, phone, email, or Instagram ID) and what they are looking for, capture them as a lead by appending:
+  ACTION:CAPTURE_LEAD|{"name":"...","phone":"...","email":"...","instagramUserId":"...","interest":"what they want","notes":"..."}
 - When an existing prospect clearly shows interest (wants to proceed, asks to be contacted, requests details/a call/a visit), append:
   ACTION:LEAD_STATUS|{"status":"interested"}
 - When a prospect says they are not interested, append:

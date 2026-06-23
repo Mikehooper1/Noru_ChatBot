@@ -1,8 +1,10 @@
 const cron = require('node-cron');
-const { admin, getDb, getBusiness } = require('../firebase/admin');
+const { admin, getDb, getBusiness, getChannelConfig, getFieldValue } = require('../firebase/admin');
 const WhatsAppService = require('./whatsappService');
 const { sendMessage } = require('./telegramService');
 const emailService = require('./emailService');
+const instagramService = require('./instagramService');
+const { sendSms } = require('./phone/phoneService');
 const { getAIResponse } = require('./ai/aiService');
 const { checkRemindersAllowed } = require('./planService');
 const SessionManager = require('./sessionManager');
@@ -56,18 +58,56 @@ async function generateFollowUpMessage(business, businessType, lead, attemptNumb
   return buildFallbackMessage(business, lead, attemptNumber);
 }
 
-function resolveDeliveryTarget(lead) {
+// Resolves all delivery targets for a lead based on user-selected follow-up
+// channels and what contact details / enabled integrations are available.
+async function resolveDeliveryTargets(lead, config) {
+  const selected = leadService.normalizeFollowUpChannels(
+    lead.outreachChannels?.length
+      ? lead.outreachChannels
+      : config?.followUpChannels || lead.followUpChannels
+  );
+  const businessId = lead.businessId;
   const phone = leadService.normalizePhone(lead.phone);
   const email = leadService.normalizeEmail(lead.email);
+  const targets = [];
 
-  if (lead.channel === 'whatsapp' && phone) return { method: 'whatsapp', to: phone };
-  if (lead.channel === 'telegram' && lead.userId) return { method: 'telegram', to: lead.userId };
-  // Website (or anything else) leads can only be reached by email.
-  if (email && emailService.isConfigured()) return { method: 'email', to: email };
-  // Last-resort fallbacks across channels if a contact exists.
-  if (phone) return { method: 'whatsapp', to: phone };
-  if (email && emailService.isConfigured()) return { method: 'email', to: email };
-  return null;
+  if (selected.includes('whatsapp') && phone) {
+    const waConfig = await getChannelConfig(businessId, 'whatsapp');
+    if (waConfig?.enabled) targets.push({ method: 'whatsapp', to: phone });
+  }
+
+  if (selected.includes('telegram') && lead.userId) {
+    const tgConfig = await getChannelConfig(businessId, 'telegram');
+    if (tgConfig?.enabled) targets.push({ method: 'telegram', to: lead.userId });
+  }
+
+  if (selected.includes('email') && email) {
+    const emailReady = await emailService.isConfiguredForBusiness(businessId);
+    if (emailReady) targets.push({ method: 'email', to: email });
+  }
+
+  if (selected.includes('phone') && phone) {
+    const phoneConfig = await getChannelConfig(businessId, 'phone');
+    if (phoneConfig?.enabled) targets.push({ method: 'phone', to: phone });
+  }
+
+  if (selected.includes('instagram') && lead.instagramUserId) {
+    const igReady = await instagramService.isConfigured(businessId);
+    if (igReady) targets.push({ method: 'instagram', to: lead.instagramUserId });
+  }
+
+  if (selected.includes('website') && lead.conversationId && lead.userId) {
+    const webConfig = await getChannelConfig(businessId, 'website');
+    if (!webConfig || webConfig.enabled !== false) {
+      targets.push({
+        method: 'website',
+        to: lead.userId,
+        conversationId: lead.conversationId,
+      });
+    }
+  }
+
+  return targets;
 }
 
 async function deliverFollowUp(lead, business, message, target) {
@@ -75,45 +115,88 @@ async function deliverFollowUp(lead, business, message, target) {
     const wa = new WhatsAppService(lead.businessId);
     await wa.init();
     await wa.sendTextMessage(target.to, message);
-  } else if (target.method === 'telegram') {
+    return;
+  }
+
+  if (target.method === 'telegram') {
     await sendMessage(lead.businessId, target.to, message);
-  } else if (target.method === 'email') {
+    return;
+  }
+
+  if (target.method === 'email') {
     await emailService.sendEmail({
+      businessId: lead.businessId,
       to: target.to,
       subject: business?.name ? `Following up from ${business.name}` : 'Following up',
       text: message,
       fromName: business?.name,
     });
-  } else {
-    throw new Error(`Unknown delivery method: ${target.method}`);
+    return;
   }
+
+  if (target.method === 'website') {
+    await getDb().collection('notifications').add({
+      businessId: lead.businessId,
+      userId: target.to,
+      type: 'lead_followup',
+      message,
+      leadId: lead.id,
+      conversationId: target.conversationId || lead.conversationId || '',
+      read: false,
+      createdAt: getFieldValue().serverTimestamp(),
+    });
+    return;
+  }
+
+  if (target.method === 'phone') {
+    await sendSms(lead.businessId, target.to, message);
+    return;
+  }
+
+  if (target.method === 'instagram') {
+    await instagramService.sendInstagramMessage(lead.businessId, target.to, message);
+    return;
+  }
+
+  throw new Error(`Unknown delivery method: ${target.method}`);
 }
 
-// Sends a single follow-up for a lead. Returns true if a message was delivered.
+// Sends a follow-up on every selected channel that has a reachable contact.
+// Returns { sent: boolean, channels: string[] }.
 async function sendLeadFollowUp(lead, { business, businessType, config }) {
   const biz = business || (await getBusiness(lead.businessId));
   const type = businessType || biz?.type || '';
   const cfg = config || (await leadService.getLeadConfig(lead.businessId));
 
-  const target = resolveDeliveryTarget(lead);
-  if (!target) {
-    // No reachable contact — stop scheduling so we don't loop forever.
+  const targets = await resolveDeliveryTargets(lead, cfg);
+  if (!targets.length) {
     await leadService.updateLeadStatus(lead.id, lead.status, { nextFollowUpAt: null });
-    return false;
+    return { sent: false, channels: [] };
   }
 
   const attemptNumber = (lead.followUpCount || 0) + 1;
   const message = await generateFollowUpMessage(biz, type, lead, attemptNumber, cfg);
 
-  await deliverFollowUp(lead, biz, message, target);
+  const sentChannels = [];
+  for (const target of targets) {
+    try {
+      await deliverFollowUp(lead, biz, message, target);
+      sentChannels.push(target.method);
+    } catch (error) {
+      console.warn(`[Leads] Follow-up via ${target.method} failed for ${lead.id}:`, error.message);
+    }
+  }
 
-  // Log the outbound message in the conversation thread when one exists.
+  if (!sentChannels.length) {
+    return { sent: false, channels: [] };
+  }
+
   if (lead.conversationId) {
     await SessionManager.saveMessage(lead.conversationId, 'bot', message).catch(() => {});
   }
 
-  await leadService.recordFollowUpSent(lead, { channel: target.method, message });
-  return true;
+  await leadService.recordFollowUpSent(lead, { channels: sentChannels, message });
+  return { sent: true, channels: sentChannels };
 }
 
 async function runLeadFollowUps() {
@@ -148,7 +231,6 @@ async function runLeadFollowUps() {
       const config = configCache.get(lead.businessId);
       if (!config.enabled) continue;
 
-      // Automatic outbound follow-ups require a reminders-capable plan (Pro+).
       if (!allowedCache.has(lead.businessId)) {
         allowedCache.set(lead.businessId, await checkRemindersAllowed(lead.businessId));
       }
@@ -157,13 +239,15 @@ async function runLeadFollowUps() {
       const business = await getBusiness(lead.businessId);
       if (business?.isActive === false) continue;
 
-      const sent = await sendLeadFollowUp(lead, {
+      const result = await sendLeadFollowUp(lead, {
         business,
         businessType: business?.type || '',
         config,
       });
-      if (sent) {
-        console.log(`[Leads] Follow-up #${(lead.followUpCount || 0) + 1} sent for lead ${lead.id}`);
+      if (result.sent) {
+        console.log(
+          `[Leads] Follow-up #${(lead.followUpCount || 0) + 1} sent for lead ${lead.id} via ${result.channels.join(', ')}`
+        );
       }
     } catch (error) {
       console.error(`[Leads] Follow-up failed for ${lead.id}:`, error.message);
@@ -175,7 +259,7 @@ function startLeadFollowUpCron() {
   cron.schedule('*/15 * * * *', () => {
     runLeadFollowUps().catch(console.error);
   });
-  console.log('Lead follow-up cron started (every 15 min, escalating schedule, Pro+)');
+  console.log('Lead follow-up cron started (every 15 min, multi-channel, Pro+)');
 }
 
 module.exports = {
@@ -183,5 +267,5 @@ module.exports = {
   runLeadFollowUps,
   sendLeadFollowUp,
   generateFollowUpMessage,
-  resolveDeliveryTarget,
+  resolveDeliveryTargets,
 };

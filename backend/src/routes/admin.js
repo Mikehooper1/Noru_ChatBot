@@ -10,6 +10,9 @@ const {
   updatePhoneConfig,
   testPhoneConfig,
   registerPhoneWebhook,
+  getEmailConfig,
+  updateEmailConfig,
+  testEmailConfig,
 } = require('../controllers/channelConfigController');
 const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
 const SessionManager = require('../services/sessionManager');
@@ -32,6 +35,9 @@ router.get('/api/channels/phone', verifyFirebaseToken, getPhoneConfig);
 router.put('/api/channels/phone', verifyFirebaseToken, updatePhoneConfig);
 router.post('/api/channels/phone/test', verifyFirebaseToken, testPhoneConfig);
 router.post('/api/channels/phone/register-webhook', verifyFirebaseToken, registerPhoneWebhook);
+router.get('/api/channels/email', verifyFirebaseToken, getEmailConfig);
+router.put('/api/channels/email', verifyFirebaseToken, updateEmailConfig);
+router.post('/api/channels/email/test', verifyFirebaseToken, testEmailConfig);
 
 router.delete('/api/conversations/:id', verifyFirebaseToken, async (req, res) => {
   try {

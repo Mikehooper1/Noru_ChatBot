@@ -4,9 +4,13 @@ const {
   verifyWhatsAppConfig,
   getPhoneConfigForAdmin,
   savePhoneConfig,
+  getEmailConfigForAdmin,
+  saveEmailConfig,
+  verifyEmailConfig,
 } = require('../services/channelConfigService');
 const { setupWebhook } = require('../services/telegramService');
 const WhatsAppService = require('../services/whatsappService');
+const emailService = require('../services/emailService');
 const {
   verifyTwilioPhoneNumber,
   configureTwilioVoiceWebhook,
@@ -144,6 +148,57 @@ async function registerPhoneWebhook(req, res) {
   }
 }
 
+async function getEmailConfig(req, res) {
+  try {
+    const { businessId } = req.query;
+    if (!businessId) return res.status(400).json({ error: 'businessId is required' });
+    const config = await getEmailConfigForAdmin(businessId);
+    res.json({
+      ...config,
+      platformSmtpConfigured: emailService.isPlatformConfigured(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function updateEmailConfig(req, res) {
+  try {
+    const { businessId, ...body } = req.body;
+    if (!businessId) return res.status(400).json({ error: 'businessId is required' });
+    const config = await saveEmailConfig(businessId, body);
+    res.json({
+      ...config,
+      platformSmtpConfigured: emailService.isPlatformConfigured(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function testEmailConfig(req, res) {
+  try {
+    const { businessId, testTo } = req.body;
+    if (!businessId) return res.status(400).json({ error: 'businessId is required' });
+    if (!testTo) return res.status(400).json({ error: 'testTo email address is required' });
+
+    const check = await verifyEmailConfig(businessId);
+    if (!check.ok) return res.status(400).json(check);
+
+    await emailService.sendEmail({
+      businessId,
+      to: testTo,
+      subject: 'Noru ChatBot — test email',
+      text: 'Your email channel is configured correctly. Lead follow-ups can be sent via email.',
+      fromName: 'Noru ChatBot',
+    });
+
+    res.json({ ok: true, message: `Test email sent to ${testTo}` });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+}
+
 module.exports = {
   getWhatsAppConfig,
   updateWhatsAppConfig,
@@ -153,4 +208,7 @@ module.exports = {
   updatePhoneConfig,
   testPhoneConfig,
   registerPhoneWebhook,
+  getEmailConfig,
+  updateEmailConfig,
+  testEmailConfig,
 };

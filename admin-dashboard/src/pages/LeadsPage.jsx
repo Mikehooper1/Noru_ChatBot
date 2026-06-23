@@ -25,6 +25,42 @@ const STATUS_LABELS = {
   unsubscribed: 'Unsubscribed',
 };
 
+const FOLLOW_UP_CHANNEL_OPTIONS = [
+  { id: 'whatsapp', label: 'WhatsApp' },
+  { id: 'telegram', label: 'Telegram' },
+  { id: 'email', label: 'Email' },
+  { id: 'phone', label: 'Phone (SMS)' },
+  { id: 'instagram', label: 'Instagram DM' },
+  { id: 'website', label: 'Website widget' },
+];
+
+const DEFAULT_OUTREACH_CHANNELS = ['whatsapp', 'telegram', 'email', 'phone', 'instagram'];
+
+function emptyLeadForm(config) {
+  return {
+    name: '',
+    phone: '',
+    email: '',
+    telegramChatId: '',
+    instagramUserId: '',
+    interest: '',
+    notes: '',
+    reachOutNow: true,
+    outreachChannels: config?.followUpChannels?.length
+      ? config.followUpChannels
+      : DEFAULT_OUTREACH_CHANNELS,
+  };
+}
+
+function toggleFollowUpChannel(channels, channelId) {
+  const list = Array.isArray(channels) ? [...channels] : [];
+  if (list.includes(channelId)) {
+    const next = list.filter((c) => c !== channelId);
+    return next.length ? next : list;
+  }
+  return [...list, channelId];
+}
+
 function formatNextFollowUp(ts) {
   if (!ts) return '—';
   const date = ts.toDate ? ts.toDate() : new Date(ts);
@@ -38,9 +74,11 @@ export default function LeadsPage() {
   const { leads, loading, error } = useLeads(currentBusiness?.id, filters);
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', interest: '', notes: '' });
+  const [form, setForm] = useState(emptyLeadForm());
   const [actionError, setActionError] = useState(null);
+  const [actionInfo, setActionInfo] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [creating, setCreating] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
   const [config, setConfig] = useState(null);
@@ -53,13 +91,38 @@ export default function LeadsPage() {
 
   const handleCreate = async () => {
     setActionError(null);
+    setActionInfo(null);
+    setCreating(true);
     try {
-      await api.createLead({ ...form, businessId: currentBusiness.id });
+      const result = await api.createLead({
+        businessId: currentBusiness.id,
+        name: form.name,
+        phone: form.phone,
+        email: form.email,
+        telegramChatId: form.telegramChatId,
+        instagramUserId: form.instagramUserId,
+        interest: form.interest,
+        notes: form.notes,
+        outreachChannels: form.outreachChannels,
+        reachOutNow: form.reachOutNow,
+      });
       setShowForm(false);
-      setForm({ name: '', phone: '', email: '', interest: '', notes: '' });
+      setForm(emptyLeadForm(config));
+      if (result.outreach?.sent) {
+        setActionInfo(`AI reached out via: ${result.outreach.channels.join(', ')}`);
+      } else if (form.reachOutNow) {
+        setActionError('Lead saved, but outreach could not be sent — check contact details and Channels settings.');
+      }
     } catch (err) {
       setActionError(err.message);
+    } finally {
+      setCreating(false);
     }
+  };
+
+  const openAddLead = () => {
+    setForm(emptyLeadForm(config));
+    setShowForm(true);
   };
 
   const handleStatus = async (lead, status) => {
@@ -104,6 +167,7 @@ export default function LeadsPage() {
         followUpOffsetsHours: Array.isArray(config.followUpOffsetsHours)
           ? config.followUpOffsetsHours
           : String(config.followUpOffsetsHours).split(',').map((h) => Number(h.trim())),
+        followUpChannels: config.followUpChannels || ['whatsapp', 'telegram', 'email'],
         instructions: config.instructions,
         notifyAdmin: config.notifyAdmin,
       });
@@ -139,14 +203,18 @@ export default function LeadsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Leads & Follow-ups</h2>
+          <h2 className="text-2xl font-bold">Leads & AI Outreach</h2>
+          <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+            Add a customer here and the AI agent will reach out on your chosen channels.
+            When customers message you on WhatsApp, Telegram, website, or other channels, the same AI handles inbound chats too.
+          </p>
           <p className="text-sm text-gray-500 mt-1">
-            Captured leads for <strong>{currentBusiness.name}</strong> · {leads.length} total
+            <strong>{currentBusiness.name}</strong> · {leads.length} leads
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => setShowSettings(true)}>Follow-up Settings</Button>
-          <Button variant="secondary" onClick={() => setShowForm(true)}>Add Lead</Button>
+          <Button variant="secondary" onClick={openAddLead}>Add Lead & Reach Out</Button>
           <Button variant="secondary" onClick={exportCSV}>Export CSV</Button>
         </div>
       </div>
@@ -164,6 +232,9 @@ export default function LeadsPage() {
 
       {(error || actionError) && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error || actionError}</div>
+      )}
+      {actionInfo && (
+        <div className="mb-4 p-3 bg-green-50 text-green-800 rounded-lg text-sm">{actionInfo}</div>
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -231,17 +302,53 @@ export default function LeadsPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
-            <h3 className="text-lg font-semibold">Add Lead</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold">Add lead & reach out</h3>
+            <p className="text-xs text-gray-500">
+              Fill in contact details, pick channels, and the AI agent will send a personalized first message.
+            </p>
             <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            <Input label="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <Input label="Interest / Requirement" value={form.interest} onChange={(e) => setForm({ ...form, interest: e.target.value })} />
-            <Textarea label="Notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <Input label="Phone (WhatsApp / SMS)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Input label="Telegram chat ID" value={form.telegramChatId} onChange={(e) => setForm({ ...form, telegramChatId: e.target.value })} placeholder="Numeric chat ID from Telegram" />
+            <Input label="Instagram user ID" value={form.instagramUserId} onChange={(e) => setForm({ ...form, instagramUserId: e.target.value })} placeholder="From a prior Instagram DM conversation" />
+            <Input label="Interest / what they want" value={form.interest} onChange={(e) => setForm({ ...form, interest: e.target.value })} placeholder="e.g. 3BHK in Mumbai, haircut booking, product demo" />
+            <Textarea label="Notes (internal)" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Reach out via</p>
+              <div className="grid grid-cols-2 gap-2">
+                {FOLLOW_UP_CHANNEL_OPTIONS.map((ch) => (
+                  <label key={ch.id} className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={(form.outreachChannels || []).includes(ch.id)}
+                      onChange={() =>
+                        setForm({
+                          ...form,
+                          outreachChannels: toggleFollowUpChannel(form.outreachChannels, ch.id),
+                        })
+                      }
+                    />
+                    {ch.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.reachOutNow !== false}
+                onChange={(e) => setForm({ ...form, reachOutNow: e.target.checked })}
+              />
+              Reach out immediately with AI message
+            </label>
+            <p className="text-xs text-gray-500">
+              Enable matching channels under Channels first. Instagram DMs only work if the customer messaged you before (Meta policy).
+            </p>
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button onClick={handleCreate}>Save Lead</Button>
+              <Button disabled={creating} onClick={handleCreate}>{creating ? 'Saving…' : 'Save & reach out'}</Button>
             </div>
           </div>
         </div>
@@ -272,6 +379,29 @@ export default function LeadsPage() {
               value={Array.isArray(config.followUpOffsetsHours) ? config.followUpOffsetsHours.join(', ') : config.followUpOffsetsHours}
               onChange={(e) => setConfig({ ...config, followUpOffsetsHours: e.target.value })}
             />
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">Contact leads via</p>
+              <div className="grid grid-cols-2 gap-2">
+                {FOLLOW_UP_CHANNEL_OPTIONS.map((ch) => (
+                  <label key={ch.id} className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={(config.followUpChannels || []).includes(ch.id)}
+                      onChange={() =>
+                        setConfig({
+                          ...config,
+                          followUpChannels: toggleFollowUpChannel(config.followUpChannels, ch.id),
+                        })
+                      }
+                    />
+                    {ch.label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                The chatbot sends each follow-up on every selected channel where the lead has contact details and the channel is enabled in Channels.
+              </p>
+            </div>
             <Textarea
               label="Follow-up tone / instructions for the AI (optional)"
               rows={3}
@@ -287,7 +417,7 @@ export default function LeadsPage() {
               Notify admin on WhatsApp when a new lead is captured
             </label>
             <p className="text-xs text-gray-500">
-              Automatic outbound follow-ups require a Pro plan or higher. Email follow-ups need SMTP configured on the server.
+              Default channels for all leads. Enable WhatsApp, Telegram, Email, Phone, and Instagram under Channels. Automatic follow-ups require Pro+.
             </p>
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" onClick={() => setShowSettings(false)}>Cancel</Button>

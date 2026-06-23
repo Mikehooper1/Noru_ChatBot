@@ -37,25 +37,50 @@ async function listLeads(req, res) {
 
 async function createLeadManual(req, res) {
   try {
-    const { businessId, name, phone, email, interest, notes, channel } = req.body;
+    const {
+      businessId,
+      name,
+      phone,
+      email,
+      interest,
+      notes,
+      channel,
+      userId,
+      telegramChatId,
+      instagramUserId,
+      outreachChannels,
+      reachOutNow,
+    } = req.body;
     if (!businessId) return res.status(400).json({ error: 'businessId is required' });
-    if (!phone && !email && !name) {
-      return res.status(400).json({ error: 'At least a name, phone, or email is required' });
+    if (!phone && !email && !name && !userId && !telegramChatId && !instagramUserId) {
+      return res.status(400).json({
+        error: 'Provide at least one contact: name, phone, email, Telegram chat ID, or Instagram user ID',
+      });
     }
 
     const business = await getBusiness(businessId);
     const lead = await leadService.createLead({
       businessId,
       channel: channel || 'manual',
+      userId: sanitizeInput(telegramChatId || userId || ''),
       name: sanitizeInput(name || ''),
       phone: sanitizeInput(phone || ''),
       email: sanitizeInput(email || ''),
+      instagramUserId: sanitizeInput(instagramUserId || ''),
       interest: sanitizeInput(interest || ''),
       notes: sanitizeInput(notes || ''),
       source: 'manual',
       businessType: business?.type || '',
+      outreachChannels: Array.isArray(outreachChannels) ? outreachChannels : undefined,
     });
-    res.status(201).json(lead);
+
+    let outreach = null;
+    if (reachOutNow === true) {
+      const { sendLeadFollowUp } = require('../services/leadFollowUpService');
+      outreach = await sendLeadFollowUp(lead, { business, businessType: business?.type || '' });
+    }
+
+    res.status(201).json({ ...lead, outreach });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -64,7 +89,7 @@ async function createLeadManual(req, res) {
 async function updateLead(req, res) {
   try {
     const { id } = req.params;
-    const { status, notes, name, phone, email, interest } = req.body;
+    const { status, notes, name, phone, email, interest, userId, telegramChatId, instagramUserId, outreachChannels } = req.body;
 
     const existing = await leadService.getLeadById(id);
     if (!existing) return res.status(404).json({ error: 'Lead not found' });
@@ -79,6 +104,13 @@ async function updateLead(req, res) {
     if (typeof phone === 'string') extra.phone = sanitizeInput(phone);
     if (typeof email === 'string') extra.email = sanitizeInput(email);
     if (typeof interest === 'string') extra.interest = sanitizeInput(interest);
+    if (typeof userId === 'string' || typeof telegramChatId === 'string') {
+      extra.userId = sanitizeInput(telegramChatId || userId || '');
+    }
+    if (typeof instagramUserId === 'string') extra.instagramUserId = sanitizeInput(instagramUserId);
+    if (Array.isArray(outreachChannels) && outreachChannels.length) {
+      extra.outreachChannels = leadService.normalizeFollowUpChannels(outreachChannels);
+    }
 
     let lead;
     if (status) {
@@ -116,12 +148,14 @@ async function sendFollowUpNow(req, res) {
       return res.status(400).json({ error: `Lead is ${lead.status} — follow-ups are paused.` });
     }
 
-    const sent = await sendLeadFollowUp(lead, {});
-    if (!sent) {
-      return res.status(400).json({ error: 'No reachable contact (phone/email) for this lead.' });
+    const result = await sendLeadFollowUp(lead, {});
+    if (!result.sent) {
+      return res.status(400).json({
+        error: 'No reachable contact on the selected follow-up channels. Check lead phone/email and Channels settings.',
+      });
     }
     const updated = await leadService.getLeadById(id);
-    res.json({ success: true, lead: updated });
+    res.json({ success: true, channels: result.channels, lead: updated });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

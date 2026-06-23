@@ -24,12 +24,12 @@ export const PLANS = {
     priceLabel: '₹999 / month',
     pricePaise: 99900,
     businesses: 2,
-    channels: ['website', 'whatsapp', 'telegram'],
+    channels: ['website', 'whatsapp', 'telegram', 'email'],
     sessionRetention: '30 days',
     reminders: true,
     features: [
       '2 AI chatbot agents',
-      'WhatsApp + Telegram',
+      'WhatsApp + Telegram + Email',
       '30-day chat memory',
       'Auto appointment reminders',
       'AI agent on all channels',
@@ -43,7 +43,7 @@ export const PLANS = {
     priceLabel: '₹2,999 / month',
     pricePaise: 299900,
     businesses: 5,
-    channels: ['website', 'whatsapp', 'telegram', 'instagram', 'phone'],
+    channels: ['website', 'whatsapp', 'telegram', 'email', 'instagram', 'phone'],
     sessionRetention: '30 days',
     reminders: true,
     features: [

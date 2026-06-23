@@ -48,6 +48,9 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     if (channel === 'phone') {
       delete safe.authToken;
     }
+    if (channel === 'email') {
+      delete safe.smtpPass;
+    }
     setForm(safe);
   }, [config, channel]);
 
@@ -88,6 +91,25 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     return saved;
   };
 
+  const persistEmailConfig = async (updates) => {
+    const payload = {
+      businessId,
+      smtpHost: updates.smtpHost ?? form.smtpHost,
+      smtpPort: updates.smtpPort ?? form.smtpPort,
+      smtpUser: updates.smtpUser ?? form.smtpUser,
+      fromEmail: updates.fromEmail ?? form.fromEmail,
+      replyTo: updates.replyTo ?? form.replyTo,
+      usePlatformSmtp: updates.usePlatformSmtp ?? form.usePlatformSmtp,
+      enabled: updates.enabled ?? form.enabled,
+    };
+    const pass = updates.smtpPass ?? form.smtpPass;
+    if (pass?.trim()) payload.smtpPass = pass.trim();
+
+    const saved = await api.saveEmailConfig(payload);
+    setForm({ ...saved, smtpPass: '' });
+    return saved;
+  };
+
   const persistConfig = async (updates) => {
     if (!businessId) return;
 
@@ -112,6 +134,20 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
         await persistPhoneConfig(updates);
       } catch (err) {
         setError(err.message || 'Failed to save Phone Voice config');
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (channel === 'email') {
+      setSaving(true);
+      setError('');
+      try {
+        await persistEmailConfig(updates);
+      } catch (err) {
+        setError(err.message || 'Failed to save Email config');
         throw err;
       } finally {
         setSaving(false);
@@ -202,6 +238,28 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     }
   };
 
+  const testEmail = async () => {
+    const testTo = form.testTo || form.fromEmail || form.smtpUser;
+    if (!testTo) {
+      setError('Enter a test recipient email below');
+      return;
+    }
+    setTesting(true);
+    setTestMessage('');
+    setError('');
+    try {
+      if (form.smtpPass?.trim() || !form.smtpPassConfigured) {
+        await persistEmailConfig(form);
+      }
+      const result = await api.testEmailConfig(businessId, testTo);
+      setTestMessage(result.message || 'Test email sent');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const copyEmbed = () => {
     const code = form.embedCode || buildEmbedCode(businessId, form);
     navigator.clipboard.writeText(code);
@@ -225,6 +283,13 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
         setForm({ ...phoneConfig, authToken: '' });
       } catch {
         setForm({ enabled: !!config?.enabled, ...(config || {}), authToken: '' });
+      }
+    } else if (channel === 'email') {
+      try {
+        const emailConfig = await api.getEmailConfig(businessId);
+        setForm({ ...emailConfig, smtpPass: '', testTo: '' });
+      } catch {
+        setForm({ enabled: !!config?.enabled, ...(config || {}), smtpPass: '', testTo: '' });
       }
     } else {
       setForm({ enabled: false, ...(config || {}) });
@@ -379,6 +444,56 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                 )}
               </>
             )}
+            {channel === 'email' && (
+              <>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Use platform SMTP</p>
+                    <p className="text-xs text-gray-500">Send via server SMTP_* env vars (Gmail, SendGrid, etc.)</p>
+                  </div>
+                  <Toggle
+                    enabled={form.usePlatformSmtp !== false}
+                    onChange={(v) => setForm({ ...form, usePlatformSmtp: v })}
+                  />
+                </div>
+                {form.platformSmtpConfigured === false && form.usePlatformSmtp !== false && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    Platform SMTP is not set on the server. Add your own SMTP below or ask your admin to set SMTP_HOST/SMTP_USER/SMTP_PASS.
+                  </p>
+                )}
+                <Input label="SMTP Host" value={form.smtpHost || ''} onChange={(e) => setForm({ ...form, smtpHost: e.target.value })} placeholder="smtp.gmail.com" />
+                <Input label="SMTP Port" type="number" value={form.smtpPort || 587} onChange={(e) => setForm({ ...form, smtpPort: e.target.value })} />
+                <Input label="SMTP Username" value={form.smtpUser || ''} onChange={(e) => setForm({ ...form, smtpUser: e.target.value })} placeholder="your@email.com" />
+                <div>
+                  <Input
+                    label="SMTP Password"
+                    type="password"
+                    value={form.smtpPass || ''}
+                    onChange={(e) => setForm({ ...form, smtpPass: e.target.value })}
+                    placeholder={form.smtpPassConfigured ? 'Leave blank to keep existing password' : 'App password or SMTP secret'}
+                  />
+                  {form.smtpPassConfigured && (
+                    <p className="text-xs text-emerald-700 mt-1">Password saved securely on server</p>
+                  )}
+                </div>
+                <Input label="From Email" value={form.fromEmail || ''} onChange={(e) => setForm({ ...form, fromEmail: e.target.value })} placeholder="noreply@yourbusiness.com" />
+                <Input label="Reply-To (optional)" value={form.replyTo || ''} onChange={(e) => setForm({ ...form, replyTo: e.target.value })} placeholder="sales@yourbusiness.com" />
+                <Input label="Send test email to" value={form.testTo || ''} onChange={(e) => setForm({ ...form, testTo: e.target.value })} placeholder="you@example.com" />
+                <Button variant="secondary" onClick={testEmail} disabled={testing || saving}>
+                  {testing ? 'Sending...' : 'Send test email'}
+                </Button>
+                {testMessage && channel === 'email' && (
+                  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                    {testMessage}
+                  </p>
+                )}
+                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
+                  <p className="font-semibold">Lead follow-ups via email</p>
+                  <p>Enable this channel, then select <strong>Email</strong> under Leads → Follow-up Settings. The chatbot will email leads who left an address.</p>
+                  <p>Requires <strong>Pro</strong> plan for automatic outbound follow-ups.</p>
+                </div>
+              </>
+            )}
             {channel === 'website' && (
               <>
                 <Input label="Primary Color" value={form.primaryColor || '#4F46E5'} onChange={(e) => setForm({ ...form, primaryColor: e.target.value })} />
@@ -511,13 +626,20 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                     3. Click <strong>Register voice webhook with Twilio</strong> — or paste the URL manually in Twilio Console → Phone Numbers → Voice Configuration.
                   </p>
                   <p>Requires <strong>Enterprise</strong> plan. Callers speak naturally; the AI agent replies by voice using your existing flows and Gemini settings.</p>
+                  <p className="mt-2">The same Twilio number can send <strong>SMS</strong> for lead outreach when Phone is selected in Leads → Follow-up Settings.</p>
                 </div>
               </>
             )}
             {channel === 'instagram' && (
               <>
-                <Input label="Page ID" value={form.pageId || ''} onChange={(e) => setForm({ ...form, pageId: e.target.value })} />
-                <Input label="Access Token" type="password" value={form.accessToken || ''} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} />
+                <Input label="Instagram Page ID" value={form.pageId || ''} onChange={(e) => setForm({ ...form, pageId: e.target.value })} placeholder="From Meta → Instagram → Settings → Page ID" />
+                <Input label="Access Token" type="password" value={form.accessToken || ''} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} placeholder="Page access token with instagram_manage_messages" />
+                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
+                  <p className="font-semibold">Lead outreach via Instagram DM</p>
+                  <p>The AI agent can reply to inbound DMs and send follow-ups to leads who previously messaged your business (Meta messaging policy).</p>
+                  <p>Store the customer&apos;s <strong>Instagram user ID</strong> on the lead — captured automatically when they DM you, or add manually in Leads.</p>
+                  <p>Requires <strong>Enterprise</strong> plan.</p>
+                </div>
               </>
             )}
             {error && <p className="text-sm text-red-600">{error}</p>}

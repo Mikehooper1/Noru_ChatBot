@@ -119,6 +119,37 @@ async function configureTwilioVoiceWebhook(businessId, backendUrl) {
   return { voiceUrl, statusUrl, phoneNumber: check.phoneNumber };
 }
 
+async function sendSms(businessId, toPhone, body) {
+  const config = await getPhoneChannelConfig(businessId);
+  if (!config?.enabled) throw new Error('Phone channel is not enabled');
+  if (!config.twilioPhoneNumber?.trim()) {
+    throw new Error('Twilio phone number missing — configure in Channels → Phone Voice');
+  }
+
+  const { accountSid, authToken } = resolveTwilioCredentials(config);
+  if (!accountSid || !authToken) {
+    throw new Error('Twilio credentials missing for SMS');
+  }
+
+  const from = toE164(config.twilioPhoneNumber);
+  const to = toE164(toPhone);
+  if (!to) throw new Error('Valid recipient phone number required');
+
+  try {
+    await axios.post(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      new URLSearchParams({ From: from, To: to, Body: String(body).slice(0, 1600) }),
+      {
+        auth: { username: accountSid, password: authToken },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }
+    );
+  } catch (error) {
+    const msg = error.response?.data?.message || error.message;
+    throw new Error(`SMS failed: ${msg}`);
+  }
+}
+
 module.exports = {
   normalizePhone,
   toE164,
@@ -127,4 +158,5 @@ module.exports = {
   getPhoneChannelConfig,
   verifyTwilioPhoneNumber,
   configureTwilioVoiceWebhook,
+  sendSms,
 };

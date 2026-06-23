@@ -124,6 +124,12 @@ export const api = {
     request('/api/channels/phone/test', { method: 'POST', body: JSON.stringify({ businessId }) }),
   registerPhoneWebhook: (businessId) =>
     request('/api/channels/phone/register-webhook', { method: 'POST', body: JSON.stringify({ businessId }) }),
+  getEmailConfig: (businessId) =>
+    request(`/api/channels/email?businessId=${encodeURIComponent(businessId)}`),
+  saveEmailConfig: (data) =>
+    request('/api/channels/email', { method: 'PUT', body: JSON.stringify(data) }),
+  testEmailConfig: (businessId, testTo) =>
+    request('/api/channels/email/test', { method: 'POST', body: JSON.stringify({ businessId, testTo }) }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',
