@@ -17,7 +17,7 @@ function ipv4Lookup(hostname, options, callback) {
 }
 
 const businessTransporters = new Map();
-const SMTP_TIMEOUT_MS = 35000;
+const SMTP_TIMEOUT_MS = 20000;
 
 function trim(value) {
   return String(value || '').trim();
@@ -181,8 +181,8 @@ async function sendEmail({ businessId, to, subject, text, html, fromName }) {
 
   return withTimeout(
     tx.sendMail(mailOptions),
-    SMTP_TIMEOUT_MS + 5000,
-    'Email send timed out — check SMTP host, port, and credentials'
+    SMTP_TIMEOUT_MS + 3000,
+    'SMTP connection timed out — Gmail often fails from Railway; use SendGrid (smtp.sendgrid.net, user=apikey) instead'
   );
 }
 

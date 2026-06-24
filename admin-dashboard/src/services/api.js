@@ -153,7 +153,7 @@ export const api = {
     request('/api/channels/email/test', {
       method: 'POST',
       body: JSON.stringify({ businessId, testTo }),
-      timeoutMs: 35000,
+      timeoutMs: 45000,
     }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
