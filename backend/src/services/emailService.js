@@ -1,18 +1,22 @@
 const dns = require('dns');
 const nodemailer = require('nodemailer');
 const { getChannelConfig } = require('../firebase/admin');
+const {
+  PROVIDER_PRESETS,
+  normalizeProviderId,
+  isGmailProvider,
+  buildCredentialsFromProvider,
+  getPlatformCredentialsFromEnv,
+  getFallbackCredentials,
+  formatProviderTimeoutError,
+  formatProviderAuthError,
+} = require('./smtpProviders');
 
 if (typeof dns.setDefaultResultOrder === 'function') {
   dns.setDefaultResultOrder('ipv4first');
 }
 
-const SMTP_TIMEOUT_MS = 15000;
-
-const PROVIDER_PRESETS = {
-  sendgrid: { host: 'smtp.sendgrid.net', port: 587, secure: false, user: 'apikey' },
-  gmail: { host: 'smtp.gmail.com', port: 587, secure: false },
-  gmail_ssl: { host: 'smtp.gmail.com', port: 465, secure: true },
-};
+const SMTP_TIMEOUT_MS = 20000;
 
 function trim(value) {
   return String(value ?? '').trim();
@@ -42,48 +46,44 @@ function withTimeout(promise, ms, message) {
   });
 }
 
+function isRetryableSmtpError(error) {
+  const msg = String(error?.message || error || '');
+  return /timeout|timed out|ETIMEDOUT|Connection timeout|ECONNREFUSED|ENETUNREACH/i.test(msg);
+}
+
 function getPlatformSmtpCredentials() {
-  const host = trim(process.env.SMTP_HOST);
-  const user = trim(process.env.SMTP_USER);
-  const pass = trim(process.env.SMTP_PASS);
-  if (!host || !user || !pass) return null;
-
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-
-  return { host, port, user, pass, secure, mode: 'platform' };
+  return getPlatformCredentialsFromEnv();
 }
 
 function isPlatformConfigured() {
   return !!getPlatformSmtpCredentials();
 }
 
-function applyProviderPreset(provider, partial = {}) {
-  const preset = PROVIDER_PRESETS[provider];
-  if (!preset) return partial;
+function getPlatformProviderInfo() {
+  const creds = getPlatformSmtpCredentials();
+  const providerId = normalizeProviderId(process.env.SMTP_PROVIDER || (creds?.provider ?? 'custom'));
+  const preset = PROVIDER_PRESETS[providerId] || PROVIDER_PRESETS.custom;
   return {
-    host: partial.host || preset.host,
-    port: partial.port || preset.port,
-    secure: partial.secure ?? preset.secure,
-    user: partial.user || preset.user || '',
-    pass: partial.pass || '',
+    provider: providerId,
+    label: preset.label,
+    configured: !!creds,
+    host: creds?.host || preset.host || '',
+    port: creds?.port || preset.port || 587,
   };
 }
 
 function buildCredentialsFromBusinessConfig(config) {
   if (!config) return null;
-
-  const provider = trim(config.smtpProvider) || 'custom';
-  const base = applyProviderPreset(provider, {
-    host: trim(config.smtpHost),
-    port: Number(config.smtpPort) || 587,
+  const providerId = normalizeProviderId(config.smtpProvider || 'custom');
+  const creds = buildCredentialsFromProvider(providerId, {
+    host: config.smtpHost,
+    port: config.smtpPort,
+    user: config.smtpUser,
+    pass: config.smtpPass,
     secure: config.smtpSecure === true,
-    user: trim(config.smtpUser),
-    pass: trim(config.smtpPass),
   });
-
-  if (!base.host || !base.user || !base.pass) return null;
-  return { ...base, mode: 'business', provider };
+  if (!creds) return null;
+  return { ...creds, mode: 'business' };
 }
 
 async function getBusinessEmailSettings(businessId) {
@@ -93,10 +93,6 @@ async function getBusinessEmailSettings(businessId) {
   return config;
 }
 
-/**
- * Single source of truth for which SMTP credentials to use.
- * Platform mode uses Railway/env vars; business mode uses Firestore channel doc.
- */
 async function resolveSmtpCredentials(businessId) {
   const bizConfig = await getBusinessEmailSettings(businessId);
   const platform = getPlatformSmtpCredentials();
@@ -104,15 +100,12 @@ async function resolveSmtpCredentials(businessId) {
     bizConfig?.smtpMode !== 'business' &&
     (!bizConfig || bizConfig.smtpMode === 'platform' || bizConfig.usePlatformSmtp !== false);
 
-  if (usePlatform && platform) {
-    return platform;
-  }
+  if (usePlatform && platform) return platform;
 
   const business = buildCredentialsFromBusinessConfig(bizConfig);
   if (business) return business;
 
   if (platform) return platform;
-
   return null;
 }
 
@@ -130,8 +123,7 @@ function createTransporter(credentials) {
   };
   const auth = { user: credentials.user, pass: credentials.pass };
 
-  const host = trim(credentials.host).toLowerCase();
-  if ((host === 'smtp.gmail.com' || host === 'gmail.com') && !secure) {
+  if (isGmailProvider(credentials.provider || credentials.host) && !secure) {
     return nodemailer.createTransport({ service: 'gmail', auth, ...socketOptions });
   }
 
@@ -145,37 +137,54 @@ function createTransporter(credentials) {
   });
 }
 
-function formatSmtpError(error) {
+function formatSmtpError(error, providerId = 'custom') {
   const msg = String(error?.message || error || '');
+  const provider = normalizeProviderId(providerId);
 
   if (/timeout|timed out|ETIMEDOUT|Connection timeout/i.test(msg)) {
-    return (
-      'SMTP connection timed out. Gmail often fails from Railway — use SendGrid instead: ' +
-      'SMTP_HOST=smtp.sendgrid.net, SMTP_PORT=587, SMTP_USER=apikey, SMTP_PASS=your-SG-key in Railway variables.'
-    );
+    return formatProviderTimeoutError(provider);
   }
   if (/ENETUNREACH|ECONNREFUSED|ESOCKET|ENOTFOUND/i.test(msg)) {
-    return 'Could not reach the mail server — check SMTP_HOST and SMTP_PORT in Railway variables, then redeploy.';
+    const preset = PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.custom;
+    return `Could not reach ${preset.label} mail server — check SMTP_HOST (${preset.host}) and redeploy Railway.`;
   }
   if (/invalid login|authentication|username and password|535|534|EAUTH/i.test(msg)) {
-    return (
-      'SMTP login failed. SendGrid: SMTP_USER must be "apikey" and SMTP_PASS your API key. ' +
-      'Gmail: use an App Password (https://myaccount.google.com/apppasswords), not your normal password.'
-    );
+    return formatProviderAuthError(provider);
   }
   return msg || 'Email send failed';
 }
 
-async function verifySmtpConnection(credentials) {
-  const tx = createTransporter(credentials);
-  if (!tx) {
-    throw new Error('SMTP host, username, and password are required');
+async function runWithProviderFallback(credentials, operation) {
+  const attempts = [credentials];
+  const fallback = getFallbackCredentials(credentials);
+  if (fallback) attempts.push(fallback);
+
+  let lastError;
+  for (const cred of attempts) {
+    try {
+      await operation(cred);
+      return cred;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableSmtpError(error) || cred === attempts[attempts.length - 1]) break;
+      console.warn(
+        `[Email] ${cred.provider} port ${cred.port} failed (${error.message}) — trying port ${fallback?.port}`
+      );
+    }
   }
-  await withTimeout(
-    tx.verify(),
-    SMTP_TIMEOUT_MS,
-    'SMTP connection timed out — check host, port, and credentials'
-  );
+  throw lastError;
+}
+
+async function verifySmtpConnection(credentials) {
+  await runWithProviderFallback(credentials, async (cred) => {
+    const tx = createTransporter(cred);
+    if (!tx) throw new Error('SMTP host, username, and password are required');
+    await withTimeout(
+      tx.verify(),
+      SMTP_TIMEOUT_MS,
+      formatProviderTimeoutError(cred.provider)
+    );
+  });
   return true;
 }
 
@@ -184,8 +193,8 @@ async function getFromAddress(businessId, businessName) {
   const creds = await resolveSmtpCredentials(businessId);
   const from =
     trim(bizConfig?.fromEmail) ||
-    (creds?.mode === 'business' ? trim(creds?.user) : '') ||
     trim(process.env.SMTP_FROM) ||
+    (creds?.mode === 'business' ? trim(creds?.user) : '') ||
     trim(process.env.SMTP_USER);
   if (businessName && from) return `${businessName} <${from}>`;
   return from || undefined;
@@ -200,19 +209,16 @@ async function isConfiguredForBusiness(businessId) {
 async function sendEmail({ businessId, to, subject, text, html, fromName, credentialsOverride }) {
   if (!to) throw new Error('Recipient email required');
 
-  const credentials = credentialsOverride || (await resolveSmtpCredentials(businessId));
-  if (!credentials) {
+  const initialCreds = credentialsOverride || (await resolveSmtpCredentials(businessId));
+  if (!initialCreds) {
     throw new Error(
-      'Email not configured — set SMTP_* in Railway variables (platform mode) or add SMTP credentials in Channels → Email'
+      'Email not configured — set SMTP_PROVIDER, SMTP_USER, SMTP_PASS in Railway (platform mode) or add credentials in Channels → Email'
     );
   }
 
-  const tx = createTransporter(credentials);
-  if (!tx) throw new Error('Invalid SMTP configuration');
-
   const bizConfig = await getBusinessEmailSettings(businessId);
   const mailOptions = {
-    from: (await getFromAddress(businessId, fromName)) || credentials.user,
+    from: (await getFromAddress(businessId, fromName)) || initialCreds.user,
     to,
     subject: subject || 'A quick follow-up',
     text: text || '',
@@ -220,38 +226,46 @@ async function sendEmail({ businessId, to, subject, text, html, fromName, creden
     replyTo: trim(bizConfig?.replyTo) || undefined,
   };
 
-  await withTimeout(
-    tx.sendMail(mailOptions),
-    SMTP_TIMEOUT_MS + 2000,
-    'SMTP connection timed out — try SendGrid (smtp.sendgrid.net) instead of Gmail on Railway'
-  );
+  await runWithProviderFallback(initialCreds, async (cred) => {
+    const tx = createTransporter(cred);
+    if (!tx) throw new Error('Invalid SMTP configuration');
+    await withTimeout(
+      tx.sendMail(mailOptions),
+      SMTP_TIMEOUT_MS + 2000,
+      formatProviderTimeoutError(cred.provider)
+    );
+  });
 }
 
 async function sendTestEmail(businessId, testTo, credentialsOverride) {
-  await verifySmtpConnection(credentialsOverride || (await resolveSmtpCredentials(businessId)));
+  const creds = credentialsOverride || (await resolveSmtpCredentials(businessId));
+  await verifySmtpConnection(creds);
   await sendEmail({
     businessId,
     to: testTo,
     subject: 'Noru — test email',
     text: 'Your email channel is configured correctly. Lead follow-ups can be sent via email.',
     fromName: 'Noru',
-    credentialsOverride,
+    credentialsOverride: creds,
   });
-  const creds = credentialsOverride || (await resolveSmtpCredentials(businessId));
+  const preset = PROVIDER_PRESETS[creds?.provider] || PROVIDER_PRESETS.custom;
   return {
     mode: creds?.mode || 'unknown',
+    provider: creds?.provider || 'custom',
+    label: preset.label,
     host: creds?.host || '',
   };
 }
 
 function clearBusinessTransporter(_businessId) {
-  // No-op: transporters are created per request (no stale cache).
+  // No-op: transporters are created per request.
 }
 
 module.exports = {
   PROVIDER_PRESETS,
   isPlatformConfigured,
   isConfiguredForBusiness,
+  getPlatformProviderInfo,
   resolveSmtpCredentials,
   verifySmtpConnection,
   sendEmail,

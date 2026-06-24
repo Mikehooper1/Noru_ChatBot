@@ -5,14 +5,14 @@ import { api } from '../../services/api';
 
 const PROVIDERS = {
   sendgrid: {
-    label: 'SendGrid (recommended for Railway)',
+    label: 'SendGrid',
     host: 'smtp.sendgrid.net',
     port: 587,
     secure: false,
     user: 'apikey',
     userPlaceholder: 'apikey',
     passPlaceholder: 'SG.your-sendgrid-api-key',
-    hint: 'Create a free API key at sendgrid.com. Verify a sender email first.',
+    hint: 'Best for Railway. SMTP_USER must be the word "apikey". Verify a sender in SendGrid first.',
   },
   gmail: {
     label: 'Gmail (port 587)',
@@ -22,7 +22,7 @@ const PROVIDERS = {
     user: '',
     userPlaceholder: 'you@gmail.com',
     passPlaceholder: 'Google App Password (16 chars)',
-    hint: 'Use an App Password from myaccount.google.com/apppasswords — not your normal Gmail password. May timeout on Railway.',
+    hint: 'App Password from myaccount.google.com/apppasswords. Auto-retries port 465 if 587 times out.',
   },
   gmail_ssl: {
     label: 'Gmail (port 465 SSL)',
@@ -32,7 +32,57 @@ const PROVIDERS = {
     user: '',
     userPlaceholder: 'you@gmail.com',
     passPlaceholder: 'Google App Password',
-    hint: 'Try this if port 587 times out. Still may fail on Railway — prefer SendGrid.',
+    hint: 'Use for Gmail on Railway. Set SMTP_PROVIDER=gmail_ssl in Railway variables.',
+  },
+  outlook: {
+    label: 'Outlook / Microsoft 365',
+    host: 'smtp.office365.com',
+    port: 587,
+    secure: false,
+    user: '',
+    userPlaceholder: 'you@outlook.com',
+    passPlaceholder: 'Password or app password',
+    hint: 'SMTP AUTH must be enabled for your Microsoft 365 mailbox.',
+  },
+  mailgun: {
+    label: 'Mailgun',
+    host: 'smtp.mailgun.org',
+    port: 587,
+    secure: false,
+    user: '',
+    userPlaceholder: 'postmaster@mg.yourdomain.com',
+    passPlaceholder: 'Mailgun SMTP password',
+    hint: 'Use SMTP credentials from Mailgun → Sending → Domain settings.',
+  },
+  brevo: {
+    label: 'Brevo (Sendinblue)',
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    user: '',
+    userPlaceholder: 'your@email.com',
+    passPlaceholder: 'Brevo SMTP key',
+    hint: 'SMTP key from Brevo → SMTP & API (not the HTTP API key).',
+  },
+  zoho: {
+    label: 'Zoho Mail',
+    host: 'smtp.zoho.com',
+    port: 587,
+    secure: false,
+    user: '',
+    userPlaceholder: 'you@zoho.com',
+    passPlaceholder: 'Zoho app-specific password',
+    hint: 'Generate an app password in Zoho Mail → Security.',
+  },
+  yahoo: {
+    label: 'Yahoo Mail',
+    host: 'smtp.mail.yahoo.com',
+    port: 587,
+    secure: false,
+    user: '',
+    userPlaceholder: 'you@yahoo.com',
+    passPlaceholder: 'Yahoo app password',
+    hint: 'Generate at login.yahoo.com/account/security.',
   },
   custom: {
     label: 'Custom SMTP',
@@ -42,8 +92,20 @@ const PROVIDERS = {
     user: '',
     userPlaceholder: 'SMTP username',
     passPlaceholder: 'SMTP password',
-    hint: 'Any SMTP server that allows connections from cloud hosts.',
+    hint: 'Any SMTP server — set host, port, username, and password manually.',
   },
+};
+
+const PLATFORM_SETUP = {
+  sendgrid: 'SMTP_PROVIDER=sendgrid  SMTP_USER=apikey  SMTP_PASS=SG.your-key',
+  gmail: 'SMTP_PROVIDER=gmail  SMTP_USER=you@gmail.com  SMTP_PASS=app-password',
+  gmail_ssl: 'SMTP_PROVIDER=gmail_ssl  SMTP_PORT=465  SMTP_SECURE=true  SMTP_USER=you@gmail.com  SMTP_PASS=app-password',
+  outlook: 'SMTP_PROVIDER=outlook  SMTP_USER=you@outlook.com  SMTP_PASS=your-password',
+  mailgun: 'SMTP_PROVIDER=mailgun  SMTP_USER=postmaster@mg.domain.com  SMTP_PASS=smtp-password',
+  brevo: 'SMTP_PROVIDER=brevo  SMTP_USER=your@email.com  SMTP_PASS=smtp-key',
+  zoho: 'SMTP_PROVIDER=zoho  SMTP_USER=you@zoho.com  SMTP_PASS=app-password',
+  yahoo: 'SMTP_PROVIDER=yahoo  SMTP_USER=you@yahoo.com  SMTP_PASS=app-password',
+  custom: 'SMTP_PROVIDER=custom  SMTP_HOST=...  SMTP_PORT=587  SMTP_USER=...  SMTP_PASS=...',
 };
 
 function applyProvider(form, providerId) {
@@ -70,8 +132,11 @@ export default function EmailChannelForm({
   const [testing, setTesting] = useState(false);
 
   const isPlatform = form.smtpMode !== 'business';
-  const provider = PROVIDERS[form.smtpProvider] || PROVIDERS.custom;
+  const platformProvider = form.platformProvider?.provider || 'custom';
+  const platformLabel = form.platformProvider?.label || 'Custom';
   const platformReady = form.platformSmtpConfigured === true;
+  const provider = PROVIDERS[form.smtpProvider] || PROVIDERS.custom;
+  const platformHint = PLATFORM_SETUP[platformProvider] || PLATFORM_SETUP.custom;
 
   const handleModeChange = (mode) => {
     setForm({
@@ -140,9 +205,9 @@ export default function EmailChannelForm({
             className="mt-1"
           />
           <span>
-            <strong>Platform SMTP (Railway)</strong>
+            <strong>Platform SMTP (Railway / server env)</strong>
             <span className="block text-xs text-gray-500 mt-0.5">
-              Uses SMTP_HOST, SMTP_USER, SMTP_PASS set in Railway environment variables.
+              Set SMTP_PROVIDER + SMTP_USER + SMTP_PASS in Railway variables.
             </span>
           </span>
         </label>
@@ -155,9 +220,9 @@ export default function EmailChannelForm({
             className="mt-1"
           />
           <span>
-            <strong>My own SMTP credentials</strong>
+            <strong>My own SMTP (per business)</strong>
             <span className="block text-xs text-gray-500 mt-0.5">
-              Stored securely per business — use SendGrid or another provider below.
+              Choose Gmail, SendGrid, Outlook, or another provider below.
             </span>
           </span>
         </label>
@@ -165,22 +230,33 @@ export default function EmailChannelForm({
 
       {isPlatform && (
         <div
-          className={`text-xs rounded-lg px-3 py-2 border ${
+          className={`text-xs rounded-lg px-3 py-2 border space-y-2 ${
             platformReady
               ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
               : 'bg-amber-50 border-amber-100 text-amber-800'
           }`}
         >
           {platformReady ? (
-            <p>
-              <strong>Platform SMTP is configured</strong> on the server. Set From Email below, then send a test.
-            </p>
+            <>
+              <p>
+                <strong>Platform SMTP ready:</strong> {platformLabel}
+                {form.platformProvider?.host ? ` (${form.platformProvider.host})` : ''}
+              </p>
+              <p>Set <strong>From Email</strong> below, then send a test.</p>
+            </>
           ) : (
-            <p>
-              <strong>Platform SMTP not detected.</strong> In Railway → backend service → Variables, add:
-              SMTP_HOST=smtp.sendgrid.net, SMTP_PORT=587, SMTP_USER=apikey, SMTP_PASS=your-SG-key, then redeploy.
-            </p>
+            <>
+              <p>
+                <strong>Platform SMTP not detected.</strong> Add these Railway variables and redeploy:
+              </p>
+              <pre className="text-[11px] bg-white/60 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                {platformHint}
+              </pre>
+            </>
           )}
+          <p className="text-[11px] opacity-80">
+            <strong>Gmail on Railway:</strong> use SMTP_PROVIDER=gmail_ssl, SMTP_PORT=465, SMTP_SECURE=true
+          </p>
         </div>
       )}
 
@@ -246,7 +322,7 @@ export default function EmailChannelForm({
         label="From Email"
         value={form.fromEmail || ''}
         onChange={(e) => setForm({ ...form, fromEmail: e.target.value })}
-        placeholder="noreply@yourbusiness.com (must match verified sender)"
+        placeholder="noreply@yourbusiness.com"
       />
       <Input
         label="Reply-To (optional)"
@@ -274,14 +350,10 @@ export default function EmailChannelForm({
           {error}
         </p>
       )}
-      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
-        <p className="font-semibold">Lead follow-ups via email</p>
-        <p>
-          Enable this channel, then select <strong>Email</strong> under Leads → Follow-up Settings.
-        </p>
-        <p>
-          <strong>Tip:</strong> SendGrid works reliably on Railway. Gmail often times out from cloud servers.
-        </p>
+      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-1">
+        <p className="font-semibold">Supported providers</p>
+        <p>SendGrid · Gmail · Outlook · Mailgun · Brevo · Zoho · Yahoo · Custom</p>
+        <p>Gmail auto-retries port 465 if 587 times out. For Railway, gmail_ssl or SendGrid work best.</p>
       </div>
     </div>
   );

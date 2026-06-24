@@ -186,6 +186,7 @@ async function getEmailConfig(req, res) {
     res.json({
       ...config,
       platformSmtpConfigured: emailService.isPlatformConfigured(),
+      platformProvider: emailService.getPlatformProviderInfo(),
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -200,6 +201,7 @@ async function updateEmailConfig(req, res) {
     res.json({
       ...config,
       platformSmtpConfigured: emailService.isPlatformConfigured(),
+      platformProvider: emailService.getPlatformProviderInfo(),
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -207,8 +209,9 @@ async function updateEmailConfig(req, res) {
 }
 
 async function testEmailConfig(req, res) {
+  const formBody = { ...req.body };
   try {
-    const { businessId, testTo, ...formBody } = req.body;
+    const { businessId, testTo } = formBody;
     if (!businessId) return res.status(400).json({ error: 'businessId is required' });
     if (!testTo) return res.status(400).json({ error: 'testTo email address is required' });
 
@@ -221,10 +224,12 @@ async function testEmailConfig(req, res) {
 
     res.json({
       ok: true,
-      message: `Test email sent to ${testTo} via ${result.mode} SMTP (${result.host})`,
+      message: `Test email sent to ${testTo} via ${result.label} (${result.host})`,
     });
   } catch (error) {
-    res.status(400).json({ ok: false, error: formatSmtpError(error) });
+    const provider =
+      formBody.smtpProvider || process.env.SMTP_PROVIDER || 'custom';
+    res.status(400).json({ ok: false, error: emailService.formatSmtpError(error, provider) });
   }
 }
 

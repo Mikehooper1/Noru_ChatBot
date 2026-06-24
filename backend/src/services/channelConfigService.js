@@ -230,12 +230,12 @@ async function verifyEmailConfig(businessId) {
 
   const credentials = await emailService.resolveSmtpCredentials(businessId);
   if (!credentials) {
-    return {
-      ok: false,
-      error:
-        'No SMTP credentials found. Platform mode: set SMTP_HOST, SMTP_USER, SMTP_PASS in Railway. ' +
-        'Business mode: fill in host, username, and password below.',
-    };
+  return {
+    ok: false,
+    error:
+      'No SMTP credentials found. Platform mode: set SMTP_PROVIDER (gmail, sendgrid, outlook, …), SMTP_USER, SMTP_PASS in Railway. ' +
+      'Business mode: pick a provider below and fill in credentials.',
+  };
   }
 
   return { ok: true, mode: credentials.mode, host: credentials.host };
