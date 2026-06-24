@@ -17,7 +17,16 @@ function ipv4Lookup(hostname, options, callback) {
 }
 
 const businessTransporters = new Map();
-const SMTP_TIMEOUT_MS = 20000;
+const SMTP_TIMEOUT_MS = 35000;
+
+function trim(value) {
+  return String(value || '').trim();
+}
+
+function isGmailHost(host) {
+  const h = trim(host).toLowerCase();
+  return h === 'smtp.gmail.com' || h === 'gmail.com';
+}
 
 function withTimeout(promise, ms, message) {
   return new Promise((resolve, reject) => {
@@ -36,37 +45,63 @@ function withTimeout(promise, ms, message) {
 }
 
 function buildTransporter({ host, port, user, pass }) {
-  if (!host || !user || !pass) return null;
+  const smtpHost = trim(host);
+  const smtpUser = trim(user);
+  const smtpPass = trim(pass);
+  if (!smtpHost || !smtpUser || !smtpPass) return null;
+
   const smtpPort = Number(port) || 587;
-  return nodemailer.createTransport({
-    host,
-    port: smtpPort,
-    secure: smtpPort === 465,
-    auth: { user, pass },
+  const useSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+
+  const socketOptions = {
     family: 4,
     lookup: ipv4Lookup,
     connectionTimeout: SMTP_TIMEOUT_MS,
     greetingTimeout: SMTP_TIMEOUT_MS,
     socketTimeout: SMTP_TIMEOUT_MS,
+  };
+
+  const auth = { user: smtpUser, pass: smtpPass };
+
+  // Nodemailer's Gmail preset handles STARTTLS correctly on cloud hosts.
+  if (isGmailHost(smtpHost) && !useSecure) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth,
+      ...socketOptions,
+    });
+  }
+
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: useSecure,
+    requireTLS: !useSecure && smtpPort === 587,
+    auth,
+    ...socketOptions,
   });
 }
 
-let platformTransporter = null;
 let platformChecked = false;
 
 function getPlatformTransporter() {
-  if (platformChecked) return platformTransporter;
-  platformChecked = true;
-  platformTransporter = buildTransporter({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  });
-  if (!platformTransporter) {
-    console.log('[Email] Platform SMTP not configured (set SMTP_HOST/SMTP_USER/SMTP_PASS in backend .env).');
+  const host = trim(process.env.SMTP_HOST);
+  const user = trim(process.env.SMTP_USER);
+  const pass = trim(process.env.SMTP_PASS);
+  if (!host || !user || !pass) {
+    if (!platformChecked) {
+      console.log('[Email] Platform SMTP not configured (set SMTP_HOST/SMTP_USER/SMTP_PASS in Railway variables).');
+      platformChecked = true;
+    }
+    return null;
   }
-  return platformTransporter;
+  platformChecked = true;
+  return buildTransporter({
+    host,
+    port: process.env.SMTP_PORT,
+    user,
+    pass,
+  });
 }
 
 async function getBusinessEmailSettings(businessId) {
