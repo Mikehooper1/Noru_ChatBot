@@ -1,29 +1,29 @@
 export const navSections = [
   {
-    title: 'Overview',
+    title: 'Workspace',
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-      { to: '/businesses', label: 'My Chatbots', icon: 'bot' },
-      { to: '/agents', label: 'Agent Inbox', icon: 'inbox' },
+      { to: '/agents', label: 'Live Chat', icon: 'inbox' },
+      { to: '/leads', label: 'Contacts', icon: 'leads' },
+      { to: '/broadcast', label: 'Campaigns', icon: 'broadcast' },
+      { to: '/analytics', label: 'History & Analytics', icon: 'analytics' },
     ],
   },
   {
-    title: 'Build',
+    title: 'Builder',
     items: [
-      { to: '/flows', label: 'Flows', icon: 'flow' },
-      { to: '/services', label: 'Services', icon: 'service' },
+      { to: '/flows', label: 'Flow Builder', icon: 'flow' },
+      { to: '/ai-settings', label: 'AI Orchestrator', icon: 'ai' },
+      { to: '/services', label: 'Products & Services', icon: 'service' },
+      { to: '/appointments', label: 'Test Number', icon: 'calendar' },
+    ],
+  },
+  {
+    title: 'Manage',
+    items: [
       { to: '/channels', label: 'Channels', icon: 'channels' },
-      { to: '/ai-settings', label: 'AI Settings', icon: 'ai' },
-    ],
-  },
-  {
-    title: 'Grow',
-    items: [
-      { to: '/leads', label: 'Leads', icon: 'leads' },
-      { to: '/appointments', label: 'Appointments', icon: 'calendar' },
-      { to: '/broadcast', label: 'Broadcast', icon: 'broadcast' },
-      { to: '/analytics', label: 'Analytics', icon: 'analytics' },
-      { to: '/plans', label: 'Plans', icon: 'card' },
+      { to: '/businesses', label: 'My Chatbots', icon: 'bot' },
+      { to: '/plans', label: 'Plans & Billing', icon: 'card' },
     ],
   },
 ];

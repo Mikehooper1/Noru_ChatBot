@@ -18,7 +18,7 @@ export default function TopBar() {
   const { openSidebar } = useLayout();
 
   return (
-    <header className="h-14 sm:h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 sticky top-0 z-30">
+    <header className="h-14 sm:h-16 bg-white/85 dark:bg-slate-900/85 backdrop-blur border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6 sticky top-0 z-30">
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <button
           type="button"
@@ -61,9 +61,25 @@ export default function TopBar() {
             </Badge>
           </Link>
         )}
+        <div className="hidden lg:flex items-center gap-2 bg-surface-subtle dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 min-w-[220px] xl:min-w-[280px]">
+          <Icon name="inbox" className="w-4 h-4 text-slate-400" />
+          <input
+            className="bg-transparent w-full text-sm outline-none text-ink dark:text-slate-200 placeholder:text-slate-400"
+            placeholder="Search flows, contacts, campaigns..."
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <Link to="/flows" className="hidden lg:inline-flex">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-primary text-white hover:bg-primary-dark transition-colors"
+          >
+            <Icon name="plus" className="w-4 h-4" />
+            Create Flow
+          </button>
+        </Link>
         <ThemeToggle />
         {isAdmin && (
           <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ink dark:bg-slate-700 text-white text-[11px] font-semibold uppercase tracking-wide">
