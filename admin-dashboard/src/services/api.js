@@ -37,16 +37,35 @@ async function getAuthHeaders() {
 }
 
 async function request(path, options = {}) {
+  const { timeoutMs, ...fetchOptions } = options;
   const headers = await getAuthHeaders();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: { ...headers, ...options.headers },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || res.statusText || `Request failed (${res.status})`);
+  const controller = timeoutMs ? new AbortController() : null;
+  const timer =
+    controller && timeoutMs
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...fetchOptions,
+      signal: controller?.signal,
+      headers: { ...headers, ...fetchOptions.headers },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || res.statusText || `Request failed (${res.status})`);
+    }
+    return parseJsonSafe(res);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(
+        'Request timed out. Check SMTP settings and that the backend can reach your mail server.'
+      );
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  return parseJsonSafe(res);
 }
 
 export const api = {
@@ -85,13 +104,13 @@ export const api = {
     return request(`/api/leads?${qs}`);
   },
   createLead: (data) =>
-    request('/api/leads', { method: 'POST', body: JSON.stringify(data) }),
+    request('/api/leads', { method: 'POST', body: JSON.stringify(data), timeoutMs: 90000 }),
   updateLead: (id, data) =>
     request(`/api/leads/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteLead: (id) =>
     request(`/api/leads/${id}`, { method: 'DELETE' }),
   sendLeadFollowUp: (id) =>
-    request(`/api/leads/${id}/followup`, { method: 'POST' }),
+    request(`/api/leads/${id}/followup`, { method: 'POST', timeoutMs: 90000 }),
   getLeadConfig: (businessId) =>
     request(`/api/lead-config?businessId=${encodeURIComponent(businessId)}`),
   saveLeadConfig: (data) =>
@@ -131,7 +150,11 @@ export const api = {
   saveEmailConfig: (data) =>
     request('/api/channels/email', { method: 'PUT', body: JSON.stringify(data) }),
   testEmailConfig: (businessId, testTo) =>
-    request('/api/channels/email/test', { method: 'POST', body: JSON.stringify({ businessId, testTo }) }),
+    request('/api/channels/email/test', {
+      method: 'POST',
+      body: JSON.stringify({ businessId, testTo }),
+      timeoutMs: 35000,
+    }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',

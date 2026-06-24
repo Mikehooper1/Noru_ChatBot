@@ -2,6 +2,23 @@ const nodemailer = require('nodemailer');
 const { getChannelConfig } = require('../firebase/admin');
 
 const businessTransporters = new Map();
+const SMTP_TIMEOUT_MS = 20000;
+
+function withTimeout(promise, ms, message) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 function buildTransporter({ host, port, user, pass }) {
   if (!host || !user || !pass) return null;
@@ -11,6 +28,9 @@ function buildTransporter({ host, port, user, pass }) {
     port: smtpPort,
     secure: smtpPort === 465,
     auth: { user, pass },
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
   });
 }
 
@@ -94,20 +114,30 @@ async function sendEmail({ businessId, to, subject, text, html, fromName }) {
   const tx = await getTransporterForBusiness(businessId);
   if (!tx) throw new Error('Email not configured — set up Email in Channels or add SMTP env vars on the server');
 
-  return tx.sendMail({
+  const mailOptions = {
     from: await getFromAddress(businessId, fromName),
     to,
     subject: subject || 'A quick follow-up',
     text: text || '',
     html: html || undefined,
     replyTo: (await getBusinessEmailSettings(businessId))?.replyTo || undefined,
-  });
+  };
+
+  return withTimeout(
+    tx.sendMail(mailOptions),
+    SMTP_TIMEOUT_MS + 5000,
+    'Email send timed out — check SMTP host, port, and credentials'
+  );
 }
 
 async function verifySmtpCredentials({ host, port, user, pass }) {
   const tx = buildTransporter({ host, port, user, pass });
   if (!tx) return { ok: false, error: 'SMTP host, user, and password are required' };
-  await tx.verify();
+  await withTimeout(
+    tx.verify(),
+    SMTP_TIMEOUT_MS,
+    'SMTP verification timed out — check host, port, and credentials'
+  );
   return { ok: true };
 }
 

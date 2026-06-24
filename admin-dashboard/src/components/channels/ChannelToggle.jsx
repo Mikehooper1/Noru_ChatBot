@@ -255,9 +255,7 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     setTestMessage('');
     setError('');
     try {
-      if (form.smtpPass?.trim() || !form.smtpPassConfigured) {
-        await persistEmailConfig(form);
-      }
+      await persistEmailConfig({ ...form, enabled: true });
       const result = await api.testEmailConfig(businessId, testTo);
       setTestMessage(result.message || 'Test email sent');
     } catch (err) {
