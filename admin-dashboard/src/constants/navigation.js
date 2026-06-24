@@ -15,7 +15,7 @@ export const navSections = [
       { to: '/flows', label: 'Flow Builder', icon: 'flow' },
       { to: '/ai-settings', label: 'AI Orchestrator', icon: 'ai' },
       { to: '/services', label: 'Products & Services', icon: 'service' },
-      { to: '/appointments', label: 'Test Number', icon: 'calendar' },
+      { to: '/appointments', label: 'Appointments', icon: 'calendar' },
     ],
   },
   {
