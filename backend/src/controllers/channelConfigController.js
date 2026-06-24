@@ -15,6 +15,7 @@ const {
   verifyTwilioPhoneNumber,
   configureTwilioVoiceWebhook,
 } = require('../services/phone/phoneService');
+const { configureWhatsAppWebhook } = require('../services/whatsappWebhookService');
 
 async function getWhatsAppConfig(req, res) {
   try {
@@ -52,6 +53,31 @@ async function testWhatsAppConfig(req, res) {
     if (!valid.ok) return res.status(400).json(valid);
 
     res.json({ ok: true, message: 'WhatsApp credentials are valid' });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+}
+
+async function registerWhatsAppWebhook(req, res) {
+  try {
+    const { businessId } = req.body;
+    if (!businessId) return res.status(400).json({ error: 'businessId is required' });
+
+    const backendUrl = (process.env.BACKEND_URL || '').replace(/\/$/, '');
+    if (!backendUrl) {
+      return res.status(400).json({
+        error: 'BACKEND_URL is not set on the server. Add your public backend URL in Railway env vars.',
+      });
+    }
+
+    const result = await configureWhatsAppWebhook(businessId, backendUrl);
+    res.json({
+      ok: true,
+      message: 'WhatsApp webhook registered with Meta successfully',
+      webhookUrl: result.webhookUrl,
+      verifyToken: result.verifyToken,
+      phoneNumberId: result.phoneNumberId,
+    });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
   }
@@ -203,6 +229,7 @@ module.exports = {
   getWhatsAppConfig,
   updateWhatsAppConfig,
   testWhatsAppConfig,
+  registerWhatsAppWebhook,
   registerTelegramWebhook,
   getPhoneConfig,
   updatePhoneConfig,

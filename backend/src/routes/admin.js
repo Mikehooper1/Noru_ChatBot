@@ -5,6 +5,7 @@ const {
   getWhatsAppConfig,
   updateWhatsAppConfig,
   testWhatsAppConfig,
+  registerWhatsAppWebhook,
   registerTelegramWebhook,
   getPhoneConfig,
   updatePhoneConfig,
@@ -30,6 +31,7 @@ router.put('/api/ai-config', verifyFirebaseToken, updateAIConfig);
 router.get('/api/channels/whatsapp', verifyFirebaseToken, getWhatsAppConfig);
 router.put('/api/channels/whatsapp', verifyFirebaseToken, updateWhatsAppConfig);
 router.post('/api/channels/whatsapp/test', verifyFirebaseToken, testWhatsAppConfig);
+router.post('/api/channels/whatsapp/register-webhook', verifyFirebaseToken, registerWhatsAppWebhook);
 router.post('/api/channels/telegram/register-webhook', verifyFirebaseToken, registerTelegramWebhook);
 router.get('/api/channels/phone', verifyFirebaseToken, getPhoneConfig);
 router.put('/api/channels/phone', verifyFirebaseToken, updatePhoneConfig);

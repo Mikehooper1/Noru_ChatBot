@@ -1,4 +1,5 @@
 const { getDb, getFieldValue, encrypt, getChannelConfig } = require('../firebase/admin');
+const { generateVerifyToken } = require('./whatsappWebhookService');
 
 async function getRawChannelDoc(businessId, channel) {
   const doc = await getDb()
@@ -38,9 +39,14 @@ async function saveWhatsAppConfig(businessId, body) {
   const ref = getDb().collection('businesses').doc(businessId).collection('channels').doc('whatsapp');
   const existing = (await ref.get()).data() || {};
 
+  let verifyToken = String(body.verifyToken ?? existing.verifyToken ?? '').trim();
+  if (!verifyToken) {
+    verifyToken = process.env.WHATSAPP_VERIFY_TOKEN?.trim() || generateVerifyToken();
+  }
+
   const payload = {
     phoneNumberId: String(body.phoneNumberId ?? existing.phoneNumberId ?? '').trim(),
-    verifyToken: String(body.verifyToken ?? existing.verifyToken ?? '').trim(),
+    verifyToken,
     adminNotifyPhone: String(body.adminNotifyPhone ?? existing.adminNotifyPhone ?? '').trim(),
     notifyOnBooking: body.notifyOnBooking !== false,
     dailyAdminDigest: body.dailyAdminDigest !== false,

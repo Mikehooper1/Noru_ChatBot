@@ -76,6 +76,11 @@ export default function Onboarding() {
         verifyToken: channels.whatsappVerifyToken.trim(),
         enabled: channelAllowed(selectedPlan, 'whatsapp') && !!channels.whatsappAccessToken.trim(),
       });
+      if (channels.whatsappAccessToken.trim() && channels.whatsappPhoneNumberId.trim()) {
+        await api.registerWhatsAppWebhook(businessId).catch((err) => {
+          console.error('WhatsApp webhook registration failed:', err);
+        });
+      }
     }
 
     if (channels.telegramBotToken.trim()) {
@@ -88,6 +93,9 @@ export default function Onboarding() {
         },
         { merge: true }
       );
+      await api.registerTelegramWebhook(businessId).catch((err) => {
+        console.error('Telegram webhook registration failed:', err);
+      });
     }
   };
 
@@ -262,8 +270,8 @@ export default function Onboarding() {
               <div>
                 <h2 className="text-xl font-bold text-ink">Connect your channels</h2>
                 <p className="text-sm text-ink-muted mt-1">
-                  Your website widget is set up automatically. Add WhatsApp &amp; Telegram tokens now or
-                  later from the Channels page. WhatsApp/Telegram require a Pro plan to go live.
+                  Your website widget is set up automatically. Add WhatsApp &amp; Telegram tokens — webhooks
+                  register automatically when you finish. You can also manage them later on the Channels page.
                 </p>
               </div>
 
@@ -271,7 +279,7 @@ export default function Onboarding() {
                 <p className="font-semibold text-ink flex items-center gap-2">💬 WhatsApp</p>
                 <Input label="Phone Number ID" value={channels.whatsappPhoneNumberId} onChange={updateChannel('whatsappPhoneNumberId')} placeholder="From Meta → WhatsApp → API Setup" />
                 <Input label="Access Token" type="password" value={channels.whatsappAccessToken} onChange={updateChannel('whatsappAccessToken')} placeholder="Permanent token from Meta" />
-                <Input label="Verify Token" value={channels.whatsappVerifyToken} onChange={updateChannel('whatsappVerifyToken')} placeholder="Matches backend WHATSAPP_VERIFY_TOKEN" />
+                <Input label="Verify Token (optional)" value={channels.whatsappVerifyToken} onChange={updateChannel('whatsappVerifyToken')} placeholder="Leave blank — auto-generated on setup" />
               </div>
 
               <div className="rounded-xl border border-slate-200 p-4 space-y-3">

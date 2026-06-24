@@ -10,6 +10,12 @@ import { channelAllowed } from '../../constants/plans';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
 
+function copyText(text, setCopied) {
+  navigator.clipboard.writeText(text);
+  setCopied(true);
+  setTimeout(() => setCopied(false), 2000);
+}
+
 function buildEmbedCode(businessId, websiteConfig) {
   const primaryColor = websiteConfig.primaryColor || '#4F46E5';
   const position = websiteConfig.position || 'bottom-right';
@@ -35,6 +41,7 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ enabled: false, ...(config || {}) });
   const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMessage, setTestMessage] = useState('');
@@ -348,7 +355,7 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                     <p className="text-xs text-emerald-700 mt-1">Token saved securely on server</p>
                   )}
                 </div>
-                <Input label="Verify Token" value={form.verifyToken || ''} onChange={(e) => setForm({ ...form, verifyToken: e.target.value })} placeholder="Same as WHATSAPP_VERIFY_TOKEN on backend" />
+                <Input label="Verify Token (auto-generated if blank)" value={form.verifyToken || ''} onChange={(e) => setForm({ ...form, verifyToken: e.target.value })} placeholder="Leave blank — we create one when you register the webhook" />
                 <Input
                   label="Admin WhatsApp number (booking alerts)"
                   value={form.adminNotifyPhone || ''}
@@ -378,7 +385,32 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                 <Button variant="secondary" onClick={testWhatsApp} disabled={testing || saving}>
                   {testing ? 'Testing...' : 'Test WhatsApp connection'}
                 </Button>
-                {testMessage && (
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    setTesting(true);
+                    setTestMessage('');
+                    setError('');
+                    try {
+                      if (form.accessToken?.trim() || form.phoneNumberId?.trim()) {
+                        await persistWhatsAppConfig(form);
+                      }
+                      const result = await api.registerWhatsAppWebhook(businessId);
+                      if (result.verifyToken) {
+                        setForm((prev) => ({ ...prev, verifyToken: result.verifyToken }));
+                      }
+                      setTestMessage(result.message || 'WhatsApp webhook registered');
+                    } catch (err) {
+                      setError(err.message);
+                    } finally {
+                      setTesting(false);
+                    }
+                  }}
+                  disabled={testing || saving}
+                >
+                  {testing ? 'Registering...' : 'Register webhook with Meta'}
+                </Button>
+                {testMessage && channel === 'whatsapp' && (
                   <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
                     {testMessage}
                   </p>
@@ -391,9 +423,21 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                   </p>
                 </div>
                 <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
-                  <p className="font-semibold">Webhook URL (paste in Meta Developer Console)</p>
+                  <p className="font-semibold">Setup from this page only</p>
+                  <p>1. Paste <strong>Phone Number ID</strong> and <strong>Access Token</strong> from Meta → WhatsApp → API Setup, then Save.</p>
+                  <p>2. Click <strong>Register webhook with Meta</strong> — no need to open Meta Developer Console.</p>
+                  <p className="font-semibold pt-1">Webhook URL</p>
                   <code className="block break-all bg-white px-2 py-1 rounded border">{`${BACKEND_URL}/webhook/whatsapp`}</code>
-                  <p>Subscribe to <strong>messages</strong>. Set verify token to match backend <code>WHATSAPP_VERIFY_TOKEN</code>.</p>
+                  <Button
+                    variant="secondary"
+                    className="text-xs"
+                    onClick={() => copyText(`${BACKEND_URL}/webhook/whatsapp`, () => setCopiedUrl('whatsapp'))}
+                  >
+                    {copiedUrl === 'whatsapp' ? 'Copied!' : 'Copy webhook URL'}
+                  </Button>
+                  {form.verifyToken && (
+                    <p>Verify token: <code className="bg-white px-1 rounded">{form.verifyToken}</code></p>
+                  )}
                   <p>Requires <strong>Pro</strong> plan. Toggle WhatsApp on after saving credentials.</p>
                 </div>
               </>
@@ -403,17 +447,20 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                 <Input label="Bot Token" type="password" value={form.botToken || ''} onChange={(e) => setForm({ ...form, botToken: e.target.value })} placeholder="From @BotFather — leave blank to keep existing" />
                 <Input label="Bot Username" value={form.botUsername || ''} onChange={(e) => setForm({ ...form, botUsername: e.target.value })} placeholder="e.g. MyClinicBot" />
                 <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
-                  <p className="font-semibold">Telegram webhook URL</p>
+                  <p className="font-semibold">Setup from this page only</p>
+                  <p>1. Save your <strong>Bot Token</strong> above.</p>
+                  <p>2. Click <strong>Register webhook with Telegram</strong> below.</p>
+                  <p className="font-semibold pt-1">Webhook URL</p>
                   <code className="block break-all bg-white px-2 py-1 rounded border">
                     {`${BACKEND_URL}/webhook/telegram/${businessId}`}
                   </code>
-                  <p>
-                    1. Save your <strong>Bot Token</strong> above, then click <strong>Register webhook</strong> below.
-                  </p>
-                  <p>
-                    Or set manually: open{' '}
-                    <code>{`https://api.telegram.org/bot<TOKEN>/setWebhook?url=${BACKEND_URL}/webhook/telegram/${businessId}`}</code>
-                  </p>
+                  <Button
+                    variant="secondary"
+                    className="text-xs"
+                    onClick={() => copyText(`${BACKEND_URL}/webhook/telegram/${businessId}`, () => setCopiedUrl('telegram'))}
+                  >
+                    {copiedUrl === 'telegram' ? 'Copied!' : 'Copy webhook URL'}
+                  </Button>
                 </div>
                 <Button
                   variant="secondary"
@@ -612,19 +659,13 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                   </p>
                 )}
                 <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
-                  <p className="font-semibold">Twilio Voice webhook URL</p>
+                  <p className="font-semibold">Setup from this page only</p>
+                  <p>1. Paste your Twilio number and credentials above, then Save.</p>
+                  <p>2. Click <strong>Register voice webhook with Twilio</strong> — no Twilio Console needed.</p>
+                  <p className="font-semibold pt-1">Voice webhook URL</p>
                   <code className="block break-all bg-white px-2 py-1 rounded border">
                     {`${BACKEND_URL}/webhook/phone/incoming`}
                   </code>
-                  <p>
-                    1. Buy a Twilio phone number and paste it above.
-                  </p>
-                  <p>
-                    2. Set <strong>TWILIO_ACCOUNT_SID</strong> and <strong>TWILIO_AUTH_TOKEN</strong> on the backend (or add per-business credentials here).
-                  </p>
-                  <p>
-                    3. Click <strong>Register voice webhook with Twilio</strong> — or paste the URL manually in Twilio Console → Phone Numbers → Voice Configuration.
-                  </p>
                   <p>Requires <strong>Enterprise</strong> plan. Callers speak naturally; the AI agent replies by voice using your existing flows and Gemini settings.</p>
                   <p className="mt-2">The same Twilio number can send <strong>SMS</strong> for lead outreach when Phone is selected in Leads → Follow-up Settings.</p>
                 </div>

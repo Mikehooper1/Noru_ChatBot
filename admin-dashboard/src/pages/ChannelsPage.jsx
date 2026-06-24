@@ -31,7 +31,11 @@ export default function ChannelsPage() {
 
   return (
     <div className="page-container">
-      <h2 className="text-2xl font-bold mb-6">Channels</h2>
+      <h2 className="text-2xl font-bold mb-2">Channels</h2>
+      <p className="text-sm text-gray-600 mb-6">
+        Connect WhatsApp, Telegram, and Phone Voice from here — paste your API tokens, Save, then click
+        {' '}<strong>Register webhook</strong> on each channel. No Meta or Twilio console required.
+      </p>
       <div className="space-y-4">
         {channels.map((ch) => (
           <ChannelToggle
