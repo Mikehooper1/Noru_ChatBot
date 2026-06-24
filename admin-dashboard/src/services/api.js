@@ -149,10 +149,10 @@ export const api = {
     request(`/api/channels/email?businessId=${encodeURIComponent(businessId)}`),
   saveEmailConfig: (data) =>
     request('/api/channels/email', { method: 'PUT', body: JSON.stringify(data) }),
-  testEmailConfig: (businessId, testTo) =>
+  testEmailConfig: (data) =>
     request('/api/channels/email/test', {
       method: 'POST',
-      body: JSON.stringify({ businessId, testTo }),
+      body: JSON.stringify(data),
       timeoutMs: 45000,
     }),
   testBot: async (businessId, message, sessionId) => {

@@ -7,6 +7,7 @@ import { Input, Select } from '../shared/Input';
 import { Link } from 'react-router-dom';
 import { Button } from '../shared/Button';
 import { channelAllowed } from '../../constants/plans';
+import EmailChannelForm from './EmailChannelForm';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000').replace(/\/$/, '');
 
@@ -99,21 +100,25 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
   };
 
   const persistEmailConfig = async (updates) => {
+    const smtpMode = updates.smtpMode ?? form.smtpMode ?? 'platform';
     const payload = {
       businessId,
+      enabled: updates.enabled ?? form.enabled,
+      smtpMode,
+      smtpProvider: updates.smtpProvider ?? form.smtpProvider,
       smtpHost: updates.smtpHost ?? form.smtpHost,
       smtpPort: updates.smtpPort ?? form.smtpPort,
+      smtpSecure: updates.smtpSecure ?? form.smtpSecure,
       smtpUser: updates.smtpUser ?? form.smtpUser,
       fromEmail: updates.fromEmail ?? form.fromEmail,
       replyTo: updates.replyTo ?? form.replyTo,
-      usePlatformSmtp: updates.usePlatformSmtp ?? form.usePlatformSmtp,
-      enabled: updates.enabled ?? form.enabled,
+      usePlatformSmtp: smtpMode !== 'business',
     };
     const pass = updates.smtpPass ?? form.smtpPass;
     if (pass?.trim()) payload.smtpPass = pass.trim();
 
     const saved = await api.saveEmailConfig(payload);
-    setForm({ ...saved, smtpPass: '' });
+    setForm({ ...saved, smtpPass: '', testTo: form.testTo || '' });
     return saved;
   };
 
@@ -245,26 +250,6 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     }
   };
 
-  const testEmail = async () => {
-    const testTo = form.testTo || form.fromEmail || form.smtpUser;
-    if (!testTo) {
-      setError('Enter a test recipient email below');
-      return;
-    }
-    setTesting(true);
-    setTestMessage('');
-    setError('');
-    try {
-      await persistEmailConfig({ ...form, enabled: true });
-      const result = await api.testEmailConfig(businessId, testTo);
-      setTestMessage(result.message || 'Test email sent');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setTesting(false);
-    }
-  };
-
   const copyEmbed = () => {
     const code = form.embedCode || buildEmbedCode(businessId, form);
     navigator.clipboard.writeText(code);
@@ -292,9 +277,22 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
     } else if (channel === 'email') {
       try {
         const emailConfig = await api.getEmailConfig(businessId);
-        setForm({ ...emailConfig, smtpPass: '', testTo: '' });
+        setForm({
+          ...emailConfig,
+          smtpMode: emailConfig.smtpMode || 'platform',
+          smtpProvider: emailConfig.smtpProvider || 'sendgrid',
+          smtpPass: '',
+          testTo: '',
+        });
       } catch {
-        setForm({ enabled: !!config?.enabled, ...(config || {}), smtpPass: '', testTo: '' });
+        setForm({
+          enabled: !!config?.enabled,
+          smtpMode: 'platform',
+          smtpProvider: 'sendgrid',
+          smtpPass: '',
+          testTo: '',
+          ...(config || {}),
+        });
       }
     } else {
       setForm({ enabled: false, ...(config || {}) });
@@ -490,54 +488,15 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
               </>
             )}
             {channel === 'email' && (
-              <>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">Use platform SMTP</p>
-                    <p className="text-xs text-gray-500">Send via server SMTP_* env vars (Gmail, SendGrid, etc.)</p>
-                  </div>
-                  <Toggle
-                    enabled={form.usePlatformSmtp !== false}
-                    onChange={(v) => setForm({ ...form, usePlatformSmtp: v })}
-                  />
-                </div>
-                {form.platformSmtpConfigured === false && form.usePlatformSmtp !== false && (
-                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                    Platform SMTP is not set on the server. Add your own SMTP below or ask your admin to set SMTP_HOST/SMTP_USER/SMTP_PASS.
-                  </p>
-                )}
-                <Input label="SMTP Host" value={form.smtpHost || ''} onChange={(e) => setForm({ ...form, smtpHost: e.target.value })} placeholder="smtp.gmail.com" />
-                <Input label="SMTP Port" type="number" value={form.smtpPort || 587} onChange={(e) => setForm({ ...form, smtpPort: e.target.value })} />
-                <Input label="SMTP Username" value={form.smtpUser || ''} onChange={(e) => setForm({ ...form, smtpUser: e.target.value })} placeholder="your@email.com" />
-                <div>
-                  <Input
-                    label="SMTP Password"
-                    type="password"
-                    value={form.smtpPass || ''}
-                    onChange={(e) => setForm({ ...form, smtpPass: e.target.value })}
-                    placeholder={form.smtpPassConfigured ? 'Leave blank to keep existing password' : 'App password or SMTP secret'}
-                  />
-                  {form.smtpPassConfigured && (
-                    <p className="text-xs text-emerald-700 mt-1">Password saved securely on server</p>
-                  )}
-                </div>
-                <Input label="From Email" value={form.fromEmail || ''} onChange={(e) => setForm({ ...form, fromEmail: e.target.value })} placeholder="noreply@yourbusiness.com" />
-                <Input label="Reply-To (optional)" value={form.replyTo || ''} onChange={(e) => setForm({ ...form, replyTo: e.target.value })} placeholder="sales@yourbusiness.com" />
-                <Input label="Send test email to" value={form.testTo || ''} onChange={(e) => setForm({ ...form, testTo: e.target.value })} placeholder="you@example.com" />
-                <Button variant="secondary" onClick={testEmail} disabled={testing || saving}>
-                  {testing ? 'Sending...' : 'Send test email'}
-                </Button>
-                {testMessage && channel === 'email' && (
-                  <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                    {testMessage}
-                  </p>
-                )}
-                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-900 space-y-2">
-                  <p className="font-semibold">Lead follow-ups via email</p>
-                  <p>Enable this channel, then select <strong>Email</strong> under Leads → Follow-up Settings. The chatbot will email leads who left an address.</p>
-                  <p>Requires <strong>Pro</strong> plan for automatic outbound follow-ups.</p>
-                </div>
-              </>
+              <EmailChannelForm
+                businessId={businessId}
+                form={form}
+                setForm={setForm}
+                error={error}
+                setError={setError}
+                testMessage={testMessage}
+                setTestMessage={setTestMessage}
+              />
             )}
             {channel === 'website' && (
               <>
@@ -681,7 +640,7 @@ export default function ChannelToggle({ businessId, channel, config, label, icon
                 </div>
               </>
             )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && channel !== 'email' && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
               <Button onClick={saveConfig} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>

@@ -149,8 +149,11 @@ async function getEmailConfigForAdmin(businessId) {
   if (!raw) {
     return {
       enabled: false,
+      smtpMode: 'platform',
+      smtpProvider: 'sendgrid',
       smtpHost: '',
       smtpPort: 587,
+      smtpSecure: false,
       smtpUser: '',
       fromEmail: '',
       replyTo: '',
@@ -160,15 +163,21 @@ async function getEmailConfigForAdmin(businessId) {
   }
 
   const { smtpPass, ...safe } = raw;
+  const smtpMode =
+    safe.smtpMode === 'business' || safe.usePlatformSmtp === false ? 'business' : 'platform';
+
   return {
     ...safe,
     enabled: safe.enabled === true,
+    smtpMode,
+    smtpProvider: safe.smtpProvider || 'custom',
     smtpHost: safe.smtpHost || '',
     smtpPort: safe.smtpPort || 587,
+    smtpSecure: safe.smtpSecure === true,
     smtpUser: safe.smtpUser || '',
     fromEmail: safe.fromEmail || '',
     replyTo: safe.replyTo || '',
-    usePlatformSmtp: safe.usePlatformSmtp !== false,
+    usePlatformSmtp: smtpMode === 'platform',
     smtpPassConfigured: Boolean(smtpPass && String(smtpPass).length > 3),
   };
 }
@@ -178,13 +187,19 @@ async function saveEmailConfig(businessId, body) {
   const ref = getDb().collection('businesses').doc(businessId).collection('channels').doc('email');
   const existing = (await ref.get()).data() || {};
 
+  const smtpMode =
+    body.smtpMode === 'business' || body.usePlatformSmtp === false ? 'business' : 'platform';
+
   const payload = {
+    smtpMode,
+    smtpProvider: String(body.smtpProvider ?? existing.smtpProvider ?? 'custom').trim(),
     smtpHost: String(body.smtpHost ?? existing.smtpHost ?? '').trim(),
     smtpPort: Number(body.smtpPort ?? existing.smtpPort ?? 587) || 587,
+    smtpSecure: body.smtpSecure === true,
     smtpUser: String(body.smtpUser ?? existing.smtpUser ?? '').trim(),
     fromEmail: String(body.fromEmail ?? existing.fromEmail ?? '').trim(),
     replyTo: String(body.replyTo ?? existing.replyTo ?? '').trim(),
-    usePlatformSmtp: body.usePlatformSmtp !== false,
+    usePlatformSmtp: smtpMode === 'platform',
     updatedAt: getFieldValue().serverTimestamp(),
   };
 
@@ -207,31 +222,23 @@ async function saveEmailConfig(businessId, body) {
 }
 
 async function verifyEmailConfig(businessId) {
+  const emailService = require('./emailService');
   const config = await getChannelConfig(businessId, 'email');
   if (!config?.enabled) {
-    return { ok: false, error: 'Email channel is not enabled' };
+    return { ok: false, error: 'Email channel is not enabled — turn on the Email toggle first' };
   }
 
-  const platformOk =
-    Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-  const businessOk = Boolean(config.smtpHost && config.smtpUser && config.smtpPass);
-  const preferPlatform = config.usePlatformSmtp !== false;
-
-  if (preferPlatform && platformOk) {
-    return { ok: true, mode: 'platform' };
-  }
-  if (businessOk) {
-    return { ok: true, mode: 'business' };
-  }
-  if (platformOk) {
-    return { ok: true, mode: 'platform' };
+  const credentials = await emailService.resolveSmtpCredentials(businessId);
+  if (!credentials) {
+    return {
+      ok: false,
+      error:
+        'No SMTP credentials found. Platform mode: set SMTP_HOST, SMTP_USER, SMTP_PASS in Railway. ' +
+        'Business mode: fill in host, username, and password below.',
+    };
   }
 
-  return {
-    ok: false,
-    error:
-      'Add SMTP credentials in Channels → Email, or set SMTP_HOST, SMTP_USER, and SMTP_PASS in Railway variables',
-  };
+  return { ok: true, mode: credentials.mode, host: credentials.host };
 }
 
 module.exports = {

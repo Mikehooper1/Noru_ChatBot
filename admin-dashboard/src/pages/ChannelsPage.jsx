@@ -33,8 +33,8 @@ export default function ChannelsPage() {
     <div className="page-container">
       <h2 className="text-2xl font-bold mb-2">Channels</h2>
       <p className="text-sm text-gray-600 mb-6">
-        Connect WhatsApp, Telegram, and Phone Voice from here — paste your API tokens, Save, then click
-        {' '}<strong>Register webhook</strong> on each channel. No Meta or Twilio console required.
+        Connect WhatsApp, Telegram, Email, and Phone Voice from here. For Email on Railway, use{' '}
+        <strong>Platform SMTP</strong> with SendGrid variables (see Channels → Email).
       </p>
       <div className="space-y-4">
         {channels.map((ch) => (

@@ -18,23 +18,7 @@ const {
 const { configureWhatsAppWebhook } = require('../services/whatsappWebhookService');
 
 function formatSmtpError(error) {
-  const msg = String(error?.message || error || '');
-  if (/timeout|timed out|ETIMEDOUT|Connection timeout/i.test(msg)) {
-    return (
-      'SMTP connection timed out from Railway. Gmail often blocks or drops connections from cloud servers. ' +
-      'Recommended: use SendGrid (free tier) — SMTP_HOST=smtp.sendgrid.net, SMTP_PORT=587, SMTP_USER=apikey, SMTP_PASS=your-SG-api-key. ' +
-      'Gmail alternative: SMTP_PORT=465, SMTP_SECURE=true, plus a Google App Password.'
-    );
-  }
-  if (/ENETUNREACH|ECONNREFUSED|ESOCKET/i.test(msg)) {
-    return (
-      'Could not reach the mail server. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in Railway variables and redeploy.'
-    );
-  }
-  if (/invalid login|authentication|username and password|535|534/i.test(msg)) {
-    return 'SMTP login failed — use a Google App Password (https://myaccount.google.com/apppasswords) or a SendGrid API key as SMTP_PASS with SMTP_USER=apikey.';
-  }
-  return msg || 'Email send failed';
+  return emailService.formatSmtpError(error);
 }
 
 async function getWhatsAppConfig(req, res) {
@@ -224,22 +208,21 @@ async function updateEmailConfig(req, res) {
 
 async function testEmailConfig(req, res) {
   try {
-    const { businessId, testTo } = req.body;
+    const { businessId, testTo, ...formBody } = req.body;
     if (!businessId) return res.status(400).json({ error: 'businessId is required' });
     if (!testTo) return res.status(400).json({ error: 'testTo email address is required' });
+
+    await saveEmailConfig(businessId, { ...formBody, enabled: true });
 
     const check = await verifyEmailConfig(businessId);
     if (!check.ok) return res.status(400).json(check);
 
-    await emailService.sendEmail({
-      businessId,
-      to: testTo,
-      subject: 'Noru ChatBot — test email',
-      text: 'Your email channel is configured correctly. Lead follow-ups can be sent via email.',
-      fromName: 'Noru ChatBot',
-    });
+    const result = await emailService.sendTestEmail(businessId, testTo);
 
-    res.json({ ok: true, message: `Test email sent to ${testTo}` });
+    res.json({
+      ok: true,
+      message: `Test email sent to ${testTo} via ${result.mode} SMTP (${result.host})`,
+    });
   } catch (error) {
     res.status(400).json({ ok: false, error: formatSmtpError(error) });
   }
