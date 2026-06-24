@@ -71,15 +71,6 @@ export default function TopBar() {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-        <Link to="/flows" className="hidden lg:inline-flex">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-primary text-white hover:bg-primary-dark transition-colors"
-          >
-            <Icon name="plus" className="w-4 h-4" />
-            Create Flow
-          </button>
-        </Link>
         <ThemeToggle />
         {isAdmin && (
           <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ink dark:bg-slate-700 text-white text-[11px] font-semibold uppercase tracking-wide">

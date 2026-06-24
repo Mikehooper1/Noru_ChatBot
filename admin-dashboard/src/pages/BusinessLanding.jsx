@@ -136,7 +136,7 @@ export default function BusinessLanding() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
-              <Input label="Your Name" value={form.name} onChange={update('name')} placeholder="Jane Doe" required />
+              <Input label="Your Name" value={form.name} onChange={update('name')} placeholder="Enter your name" required />
             )}
             <Input label="Email" type="email" value={form.email} onChange={update('email')} required />
             <Input
