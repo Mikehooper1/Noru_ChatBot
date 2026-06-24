@@ -1,5 +1,20 @@
+const dns = require('dns');
 const nodemailer = require('nodemailer');
 const { getChannelConfig } = require('../firebase/admin');
+
+// Cloud hosts (Railway, Render, etc.) often have no IPv6 route; Gmail resolves to
+// IPv6 first and nodemailer fails with ENETUNREACH unless we prefer IPv4.
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
+function ipv4Lookup(hostname, options, callback) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  dns.lookup(hostname, { ...options, family: 4 }, callback);
+}
 
 const businessTransporters = new Map();
 const SMTP_TIMEOUT_MS = 20000;
@@ -28,6 +43,8 @@ function buildTransporter({ host, port, user, pass }) {
     port: smtpPort,
     secure: smtpPort === 465,
     auth: { user, pass },
+    family: 4,
+    lookup: ipv4Lookup,
     connectionTimeout: SMTP_TIMEOUT_MS,
     greetingTimeout: SMTP_TIMEOUT_MS,
     socketTimeout: SMTP_TIMEOUT_MS,
@@ -60,11 +77,19 @@ async function getBusinessEmailSettings(businessId) {
 }
 
 async function getTransporterForBusiness(businessId) {
+  const bizConfig = await getBusinessEmailSettings(businessId);
+  const platformTx = getPlatformTransporter();
+  const preferPlatform = !bizConfig || bizConfig.usePlatformSmtp !== false;
+
+  // When "Use platform SMTP" is on, Railway env vars win over per-business form fields.
+  if (preferPlatform && platformTx) {
+    return platformTx;
+  }
+
   if (businessId && businessTransporters.has(businessId)) {
     return businessTransporters.get(businessId);
   }
 
-  const bizConfig = await getBusinessEmailSettings(businessId);
   if (bizConfig?.smtpHost && bizConfig?.smtpUser && bizConfig?.smtpPass) {
     const tx = buildTransporter({
       host: bizConfig.smtpHost,
@@ -78,11 +103,7 @@ async function getTransporterForBusiness(businessId) {
     }
   }
 
-  if (!bizConfig || bizConfig.usePlatformSmtp !== false) {
-    return getPlatformTransporter();
-  }
-
-  return null;
+  return platformTx || null;
 }
 
 function isPlatformConfigured() {
@@ -92,9 +113,9 @@ function isPlatformConfigured() {
 async function isConfiguredForBusiness(businessId) {
   const bizConfig = await getBusinessEmailSettings(businessId);
   if (!bizConfig) return false;
+  if (bizConfig.usePlatformSmtp !== false && isPlatformConfigured()) return true;
   if (bizConfig.smtpHost && bizConfig.smtpUser && bizConfig.smtpPass) return true;
-  if (bizConfig.usePlatformSmtp !== false) return isPlatformConfigured();
-  return false;
+  return isPlatformConfigured();
 }
 
 async function getFromAddress(businessId, businessName) {

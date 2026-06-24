@@ -211,15 +211,26 @@ async function verifyEmailConfig(businessId) {
   if (!config?.enabled) {
     return { ok: false, error: 'Email channel is not enabled' };
   }
-  if (config.smtpHost && config.smtpUser && config.smtpPass) {
-    return { ok: true, mode: 'business' };
-  }
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+
+  const platformOk =
+    Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  const businessOk = Boolean(config.smtpHost && config.smtpUser && config.smtpPass);
+  const preferPlatform = config.usePlatformSmtp !== false;
+
+  if (preferPlatform && platformOk) {
     return { ok: true, mode: 'platform' };
   }
+  if (businessOk) {
+    return { ok: true, mode: 'business' };
+  }
+  if (platformOk) {
+    return { ok: true, mode: 'platform' };
+  }
+
   return {
     ok: false,
-    error: 'Add SMTP credentials in Channels → Email, or set SMTP_* env vars on the server',
+    error:
+      'Add SMTP credentials in Channels → Email, or set SMTP_HOST, SMTP_USER, and SMTP_PASS in Railway variables',
   };
 }
 

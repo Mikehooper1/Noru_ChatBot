@@ -17,6 +17,20 @@ const {
 } = require('../services/phone/phoneService');
 const { configureWhatsAppWebhook } = require('../services/whatsappWebhookService');
 
+function formatSmtpError(error) {
+  const msg = String(error?.message || error || '');
+  if (/ENETUNREACH|ECONNREFUSED|ETIMEDOUT|ESOCKET/i.test(msg)) {
+    return (
+      'Could not reach the mail server. On Railway, set SMTP_HOST=smtp.gmail.com, SMTP_PORT=587, ' +
+      'SMTP_USER=your@gmail.com, SMTP_PASS=Google App Password (not your normal password), then redeploy.'
+    );
+  }
+  if (/invalid login|authentication|username and password|535|534/i.test(msg)) {
+    return 'SMTP login failed — use a Google App Password (https://myaccount.google.com/apppasswords), not your regular Gmail password.';
+  }
+  return msg || 'Email send failed';
+}
+
 async function getWhatsAppConfig(req, res) {
   try {
     const { businessId } = req.query;
@@ -221,7 +235,7 @@ async function testEmailConfig(req, res) {
 
     res.json({ ok: true, message: `Test email sent to ${testTo}` });
   } catch (error) {
-    res.status(400).json({ ok: false, error: error.message });
+    res.status(400).json({ ok: false, error: formatSmtpError(error) });
   }
 }
 
