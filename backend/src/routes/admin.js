@@ -44,6 +44,18 @@ router.post('/api/platform/billing/test', verifyFirebaseToken, requireAdmin, tes
 router.get('/api/platform/plans', verifyFirebaseToken, requireAdmin, getPlatformPlans);
 router.put('/api/platform/plans', verifyFirebaseToken, requireAdmin, updatePlatformPlans);
 
+router.get('/api/admin/businesses', verifyFirebaseToken, requireAdmin, async (_req, res) => {
+  try {
+    const snap = await getDb().collection('businesses').get();
+    const businesses = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    res.json(businesses);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/api/services/sync-knowledge-base', verifyFirebaseToken, async (req, res) => {
   try {
     const { businessId } = req.body;

@@ -38,7 +38,19 @@ async function createOrder(req, res) {
 
     res.json(order);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    const msg = error.message || 'Failed to create payment order';
+    let status = 500;
+    if (
+      msg.includes('not configured') ||
+      msg.includes('disabled') ||
+      msg.includes('not available')
+    ) {
+      status = 503;
+    } else if (msg.includes('Invalid plan') || msg.includes('Razorpay:')) {
+      status = 400;
+    }
+    console.error('create-order error:', msg);
+    res.status(status).json({ error: msg });
   }
 }
 

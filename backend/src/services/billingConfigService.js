@@ -55,7 +55,20 @@ async function getRawBillingDoc() {
 
 async function getPaymentCredentials() {
   const raw = await getRawBillingDoc();
-  if (raw?.provider && raw.provider !== 'mock') {
+  const usesRazorpay =
+    raw?.provider === 'razorpay' ||
+    raw?.paymentMode === 'razorpay_test' ||
+    raw?.paymentMode === 'razorpay_live';
+
+  if (usesRazorpay) {
+    const keyId = String(raw?.keyId || '').trim();
+    const keySecret = raw?.keySecret ? decrypt(raw.keySecret) : '';
+    if (keyId && keySecret) {
+      return { provider: 'razorpay', keyId, keySecret, source: 'firestore' };
+    }
+  }
+
+  if (raw?.provider && raw.provider !== 'mock' && raw.provider !== 'razorpay') {
     const keyId = String(raw.keyId || '').trim();
     const keySecret = raw.keySecret ? decrypt(raw.keySecret) : '';
     if (keyId && keySecret) {
@@ -75,10 +88,10 @@ async function isPaymentConfigured() {
   return creds.provider !== 'mock' && Boolean(creds.keyId && creds.keySecret);
 }
 
-/** Mock auto-approve is only allowed when admin explicitly chose mock, or in non-production with no gateway. */
+/** Mock auto-approve when admin chose mock mode (any environment). */
 async function allowMockPayments() {
   const raw = await getRawBillingDoc();
-  if (raw?.provider === 'mock') return true;
+  if (raw?.paymentMode === 'mock' || raw?.provider === 'mock') return true;
   if (process.env.NODE_ENV === 'production') return false;
   return !(await isPaymentConfigured());
 }

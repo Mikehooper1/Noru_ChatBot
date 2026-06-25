@@ -8,6 +8,19 @@ const {
   allowMockPayments,
 } = require('./billingConfigService');
 
+/** Razorpay receipt max length is 40 characters. */
+function buildReceipt(planId) {
+  const base = `n_${planId}_${Date.now().toString(36)}`;
+  return base.length <= 40 ? base : base.slice(0, 40);
+}
+
+function razorpayErrorMessage(error) {
+  const desc = error.response?.data?.error?.description;
+  const code = error.response?.data?.error?.code;
+  if (desc) return `Razorpay: ${desc}${code ? ` (${code})` : ''}`;
+  return error.message || 'Razorpay request failed';
+}
+
 async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
   const plan = await getPlan(planId);
   if (!plan || plan.pricePaise <= 0) {
@@ -22,7 +35,7 @@ async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
   const orderData = {
     amount: plan.pricePaise,
     currency: 'INR',
-    receipt: `noru_${userId || businessId}_${planId}_${Date.now()}`,
+    receipt: buildReceipt(planId),
     notes: { userId: userId || '', businessId: businessId || '', planId, userEmail: userEmail || '' },
   };
 
@@ -56,9 +69,16 @@ async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
 
   const { keyId, keySecret } = await getPaymentCredentials();
   const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-  const response = await axios.post('https://api.razorpay.com/v1/orders', orderData, {
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-  });
+
+  let response;
+  try {
+    response = await axios.post('https://api.razorpay.com/v1/orders', orderData, {
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+      timeout: 15000,
+    });
+  } catch (error) {
+    throw new Error(razorpayErrorMessage(error));
+  }
 
   await getDb().collection('payments').doc(response.data.id).set({
     userId: userId || null,

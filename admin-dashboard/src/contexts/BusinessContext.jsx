@@ -11,15 +11,9 @@ import {
 } from '../firebase/firestore';
 import { db } from '../firebase/firestore';
 import { useAuth } from './AuthContext';
+import { api } from '../services/api';
 
 const BusinessContext = createContext(null);
-
-async function fetchAllBusinesses() {
-  const snap = await getDocs(collection(db, 'businesses'));
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-}
 
 async function fetchBusinessesForUser(userId) {
   const map = new Map();
@@ -34,20 +28,26 @@ async function fetchBusinessesForUser(userId) {
 
   for (const bizId of businessIds) {
     if (map.has(bizId)) continue;
-    const bizDoc = await getDoc(doc(db, 'businesses', bizId));
-    if (bizDoc.exists()) map.set(bizId, { id: bizDoc.id, ...bizDoc.data() });
+    try {
+      const bizDoc = await getDoc(doc(db, 'businesses', bizId));
+      if (bizDoc.exists()) map.set(bizId, { id: bizDoc.id, ...bizDoc.data() });
+    } catch {
+      // User may be listed in businessIds without owner/adminIds access
+    }
   }
 
   return Array.from(map.values()).sort((a, b) => a.name?.localeCompare(b.name));
 }
 
 export function BusinessProvider({ children }) {
-  const { user, isAdmin, refreshUserProfile } = useAuth();
+  const { user, isAdmin, loading: authLoading, refreshUserProfile } = useAuth();
   const [businesses, setBusinesses] = useState([]);
   const [currentBusiness, setCurrentBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!user) {
       setBusinesses([]);
       setCurrentBusiness(null);
@@ -55,15 +55,16 @@ export function BusinessProvider({ children }) {
       return;
     }
 
-    // Reset loading when user changes so we don't redirect to onboarding
-    // while the async fetch is still in flight (businesses would be []).
     setLoading(true);
 
     let unsub = null;
+    let adminPollTimer = null;
 
     const load = async () => {
       try {
-        const all = isAdmin ? await fetchAllBusinesses() : await fetchBusinessesForUser(user.uid);
+        const all = isAdmin
+          ? await api.getAdminBusinesses()
+          : await fetchBusinessesForUser(user.uid);
         setBusinesses(all);
         setCurrentBusiness((prev) => {
           if (prev && all.some((b) => b.id === prev.id)) return prev;
@@ -75,22 +76,23 @@ export function BusinessProvider({ children }) {
           return all[0] || null;
         });
 
-        // Existing accounts created before onboarding flag — mark complete.
         if (!isAdmin && all.length > 0) {
           const userRef = doc(db, 'users', user.uid);
           const userSnap = await getDoc(userRef);
           const userData = userSnap.exists() ? userSnap.data() : {};
-          const patch = { onboardingComplete: true };
-          if (!userData.plan) {
-            const legacyPlan = all.reduce((best, b) => {
-              const order = { free: 0, pro: 1, enterprise: 2 };
-              return (order[b.plan] || 0) > (order[best] || 0) ? b.plan : best;
-            }, 'free');
-            patch.plan = legacyPlan;
+          if (!userData.onboardingComplete) {
+            const patch = { onboardingComplete: true };
+            if (!userData.plan) {
+              const legacyPlan = all.reduce((best, b) => {
+                const order = { free: 0, pro: 1, enterprise: 2 };
+                return (order[b.plan] || 0) > (order[best] || 0) ? b.plan : best;
+              }, 'free');
+              patch.plan = legacyPlan;
+            }
+            setDoc(userRef, patch, { merge: true })
+              .then(() => refreshUserProfile?.())
+              .catch(() => {});
           }
-          setDoc(userRef, patch, { merge: true })
-            .then(() => refreshUserProfile?.())
-            .catch(() => {});
         }
       } catch (err) {
         console.error('Failed to load businesses:', err);
@@ -101,18 +103,22 @@ export function BusinessProvider({ children }) {
 
     load();
 
-    const watchQuery = isAdmin
-      ? collection(db, 'businesses')
-      : query(collection(db, 'businesses'), where('ownerId', '==', user.uid));
-    unsub = onSnapshot(watchQuery, () => load(), (err) => {
-      console.error('Business snapshot error:', err);
-      setLoading(false);
-    });
+    if (isAdmin) {
+      // Firestore client rules block listing all businesses; refresh via backend API.
+      adminPollTimer = setInterval(load, 60_000);
+    } else {
+      const watchQuery = query(collection(db, 'businesses'), where('ownerId', '==', user.uid));
+      unsub = onSnapshot(watchQuery, () => load(), (err) => {
+        console.error('Business snapshot error:', err);
+        setLoading(false);
+      });
+    }
 
     return () => {
       if (unsub) unsub();
+      if (adminPollTimer) clearInterval(adminPollTimer);
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, authLoading, refreshUserProfile]);
 
   const selectBusiness = (business) => {
     setCurrentBusiness(business);
@@ -132,7 +138,7 @@ export function BusinessProvider({ children }) {
         currentBusiness,
         setCurrentBusiness: selectBusiness,
         ownedCount,
-        loading,
+        loading: loading || authLoading,
       }}
     >
       {children}

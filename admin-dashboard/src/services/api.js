@@ -161,6 +161,7 @@ export const api = {
       timeoutMs: 45000,
     }),
   getPlatformBilling: () => request('/api/platform/billing'),
+  getAdminBusinesses: () => request('/api/admin/businesses'),
   savePlatformBilling: (data) =>
     request('/api/platform/billing', { method: 'PUT', body: JSON.stringify(data) }),
   testPlatformBilling: () =>
