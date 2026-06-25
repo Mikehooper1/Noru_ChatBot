@@ -5,12 +5,13 @@ const {
   activateMockPayment,
   activatePlan,
   isRazorpayConfigured,
+  isMockPaymentOrder,
   getAllPlans,
 } = require('../services/paymentService');
 const { getPlan, DEFAULT_PLANS } = require('../services/planCatalogService');
 const { verifyCheckoutToken } = require('../services/checkoutService');
 const { getBusiness, getDb } = require('../firebase/admin');
-const { getPaymentCredentials } = require('../services/billingConfigService');
+const { getPaymentCredentials, allowMockPayments } = require('../services/billingConfigService');
 
 async function createOrder(req, res) {
   try {
@@ -46,13 +47,20 @@ async function verifyPayment(req, res) {
     const userId = req.user.uid;
     const { orderId, paymentId, signature, planId } = req.body;
 
-    if (!planId) {
+    if (!orderId || !planId) {
       return res.status(400).json({ error: 'Missing payment details' });
     }
 
-    if (orderId?.startsWith('order_mock_') || !(await isRazorpayConfigured())) {
+    if (await isMockPaymentOrder(orderId)) {
+      if (!(await allowMockPayments())) {
+        return res.status(400).json({ error: 'Test payments are not enabled' });
+      }
       const result = await activateMockPayment(userId, planId);
       return res.json(result);
+    }
+
+    if (!paymentId || !signature) {
+      return res.status(400).json({ error: 'Missing payment verification details' });
     }
 
     const result = await verifyAndActivate({ orderId, paymentId, signature, userId, planId });
@@ -83,6 +91,21 @@ async function getCheckoutInfo(req, res) {
 
     const payment = paymentDoc.data();
     const configured = await isRazorpayConfigured();
+    const mockAllowed = await allowMockPayments();
+    const isMock = payment.provider === 'mock';
+
+    if (isMock && !mockAllowed) {
+      return res.status(503).json({
+        error: 'Payments are not available. Please contact support.',
+      });
+    }
+
+    if (!configured && !isMock) {
+      return res.status(503).json({
+        error: 'Payment gateway is not configured. Please contact support.',
+      });
+    }
+
     const creds = configured ? await getPaymentCredentials() : { keyId: 'mock_key' };
 
     res.json({
@@ -94,7 +117,7 @@ async function getCheckoutInfo(req, res) {
       amount: payment.amount,
       currency: payment.currency || 'INR',
       keyId: configured ? creds.keyId : 'mock_key',
-      mock: payment.provider === 'mock' || !configured,
+      mock: isMock && mockAllowed,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -114,9 +137,15 @@ async function verifyPublicPayment(req, res) {
     const plan = await getPlan(payload.planId);
     let result;
 
-    if (payload.orderId.startsWith('order_mock_') || !(await isRazorpayConfigured())) {
+    if (await isMockPaymentOrder(payload.orderId)) {
+      if (!(await allowMockPayments())) {
+        return res.status(400).json({ error: 'Test payments are not enabled' });
+      }
       result = await activatePlan(payload.businessId, payload.planId);
     } else {
+      if (!paymentId || !signature) {
+        return res.status(400).json({ error: 'Missing payment verification details' });
+      }
       const business = await getBusiness(payload.businessId);
       if (!business?.ownerId) return res.status(404).json({ error: 'Business owner not found' });
       result = await verifyAndActivate({

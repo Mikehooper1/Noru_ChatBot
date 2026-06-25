@@ -172,15 +172,14 @@ export default function Onboarding() {
       await runPayment();
 
       setStatusMsg('Finishing up...');
-      await setDoc(
-        doc(db, 'users', user.uid),
-        {
-          plan: selectedPlan,
-          onboardingComplete: true,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      const userUpdate = {
+        onboardingComplete: true,
+        updatedAt: serverTimestamp(),
+      };
+      if (selectedPlan === 'free') {
+        userUpdate.plan = 'free';
+      }
+      await setDoc(doc(db, 'users', user.uid), userUpdate, { merge: true });
       await refreshUserProfile();
       setCurrentBusiness(created);
       navigate('/dashboard');

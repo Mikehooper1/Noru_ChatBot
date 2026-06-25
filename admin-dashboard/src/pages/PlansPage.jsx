@@ -59,7 +59,9 @@ export default function PlansPage() {
           planId,
         });
         await refreshUserProfile();
-        setMessage(`✅ ${planMeta.name} plan activated! Valid for 30 days. You can create up to ${planMeta.businesses} AI agents.`);
+        setMessage(
+          `✅ ${planMeta.name} plan activated (test mode). Valid for 30 days. You can create up to ${planMeta.businesses} AI agents.`
+        );
         setPaying(null);
         return;
       }

@@ -48,6 +48,14 @@ async function isPaymentConfigured() {
   return creds.provider !== 'mock' && Boolean(creds.keyId && creds.keySecret);
 }
 
+/** Mock auto-approve is only allowed when admin explicitly chose mock, or in non-production with no gateway. */
+async function allowMockPayments() {
+  const raw = await getRawBillingDoc();
+  if (raw?.provider === 'mock') return true;
+  if (process.env.NODE_ENV === 'production') return false;
+  return !(await isPaymentConfigured());
+}
+
 async function getBillingConfigForAdmin() {
   const raw = await getRawBillingDoc();
   const env = getEnvCredentials();
@@ -144,4 +152,5 @@ module.exports = {
   testBillingConfig,
   getPaymentCredentials,
   isPaymentConfigured,
+  allowMockPayments,
 };

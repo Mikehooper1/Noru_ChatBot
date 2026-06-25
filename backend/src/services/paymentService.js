@@ -2,7 +2,11 @@ const crypto = require('crypto');
 const axios = require('axios');
 const { getDb, getFieldValue, getBusiness } = require('../firebase/admin');
 const { getPlan, getAllPlans } = require('./planCatalogService');
-const { getPaymentCredentials, isPaymentConfigured } = require('./billingConfigService');
+const {
+  getPaymentCredentials,
+  isPaymentConfigured,
+  allowMockPayments,
+} = require('./billingConfigService');
 
 async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
   const plan = await getPlan(planId);
@@ -24,6 +28,11 @@ async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
 
   const configured = await isPaymentConfigured();
   if (!configured) {
+    if (!(await allowMockPayments())) {
+      throw new Error(
+        'Payment gateway is not configured. An admin must set up Razorpay before customers can upgrade.'
+      );
+    }
     const mockOrderId = `order_mock_${Date.now()}`;
     await getDb().collection('payments').doc(mockOrderId).set({
       userId: userId || null,
@@ -74,11 +83,17 @@ async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
 }
 
 async function verifyRazorpaySignature(orderId, paymentId, signature) {
-  if (!(await isPaymentConfigured())) return true;
+  if (!(await isPaymentConfigured())) return false;
   const { keySecret } = await getPaymentCredentials();
   const body = `${orderId}|${paymentId}`;
   const expected = crypto.createHmac('sha256', keySecret).update(body).digest('hex');
   return expected === signature;
+}
+
+async function isMockPaymentOrder(orderId) {
+  if (!orderId?.startsWith('order_mock_')) return false;
+  const doc = await getDb().collection('payments').doc(orderId).get();
+  return doc.exists && doc.data().provider === 'mock';
 }
 
 async function activatePlanForUser(userId, planId, paymentDetails = {}) {
@@ -137,5 +152,6 @@ module.exports = {
   activateMockPayment,
   activatePlan,
   activatePlanForUser,
+  isMockPaymentOrder,
   getAllPlans,
 };
