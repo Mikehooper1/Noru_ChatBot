@@ -27,3 +27,11 @@ export const navSections = [
     ],
   },
 ];
+
+export const adminNavSection = {
+  title: 'Platform',
+  items: [
+    { to: '/platform/billing', label: 'Payment Gateway', icon: 'card' },
+    { to: '/platform/plans', label: 'Plan Catalog', icon: 'service' },
+  ],
+};

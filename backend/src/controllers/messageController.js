@@ -77,7 +77,7 @@ async function processIncomingMessage({ businessId, channel, userId, userMessage
       userData
     );
 
-    const plan = getPlan(planCheck.planId);
+    const plan = await getPlan(planCheck.planId);
     if (isConversationExpired(conversation, plan)) {
       await SessionManager.resolveConversation(conversation.id);
       conversation = await SessionManager.getOrCreateConversation(
@@ -261,7 +261,7 @@ async function handleWidgetStart({ businessId, sessionId, userName, userPhone })
     { name: userName || 'Visitor', phone: userPhone || '' }
   );
 
-  const plan = getPlan(planCheck.planId);
+  const plan = await getPlan(planCheck.planId);
   if (isConversationExpired(conversation, plan)) {
     await SessionManager.resolveConversation(conversation.id);
     conversation = await SessionManager.getOrCreateConversation(

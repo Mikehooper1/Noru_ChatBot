@@ -1,0 +1,147 @@
+const axios = require('axios');
+const { getDb, getFieldValue, encrypt, decrypt } = require('../firebase/admin');
+
+const DOC_PATH = { collection: 'platform', doc: 'billing' };
+
+const GATEWAYS = ['razorpay', 'stripe', 'mock'];
+
+function maskKeyId(keyId) {
+  if (!keyId) return '';
+  const s = String(keyId);
+  if (s.length <= 8) return '••••••••';
+  return `${s.slice(0, 4)}••••${s.slice(-4)}`;
+}
+
+function getEnvCredentials() {
+  return {
+    provider: process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET ? 'razorpay' : 'mock',
+    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+    source: 'env',
+  };
+}
+
+async function getRawBillingDoc() {
+  const doc = await getDb().collection(DOC_PATH.collection).doc(DOC_PATH.doc).get();
+  return doc.exists ? doc.data() : null;
+}
+
+async function getPaymentCredentials() {
+  const raw = await getRawBillingDoc();
+  if (raw?.provider && raw.provider !== 'mock') {
+    const keyId = String(raw.keyId || '').trim();
+    const keySecret = raw.keySecret ? decrypt(raw.keySecret) : '';
+    if (keyId && keySecret) {
+      return { provider: raw.provider, keyId, keySecret, source: 'firestore' };
+    }
+  }
+
+  const env = getEnvCredentials();
+  if (env.keyId && env.keySecret) return env;
+  return { provider: 'mock', keyId: '', keySecret: '', source: 'none' };
+}
+
+async function isPaymentConfigured() {
+  const raw = await getRawBillingDoc();
+  if (raw?.enabled === false) return false;
+  const creds = await getPaymentCredentials();
+  return creds.provider !== 'mock' && Boolean(creds.keyId && creds.keySecret);
+}
+
+async function getBillingConfigForAdmin() {
+  const raw = await getRawBillingDoc();
+  const env = getEnvCredentials();
+  const creds = await getPaymentCredentials();
+
+  const provider = raw?.provider || env.provider || 'mock';
+  const keyId = raw?.keyId || (raw ? '' : env.keyId);
+  const hasSecret = Boolean(
+    (raw?.keySecret && String(raw.keySecret).length > 10) ||
+      (!raw && env.keySecret)
+  );
+
+  return {
+    provider,
+    keyId: keyId || '',
+    keyIdMasked: maskKeyId(keyId),
+    keySecretConfigured: hasSecret,
+    currency: raw?.currency || 'INR',
+    enabled: raw?.enabled !== false,
+    configured: await isPaymentConfigured(),
+    configSource: creds.source,
+    availableGateways: GATEWAYS.map((id) => ({
+      id,
+      label: id === 'razorpay' ? 'Razorpay' : id === 'stripe' ? 'Stripe' : 'Mock (testing)',
+      supported: id !== 'stripe',
+    })),
+    updatedAt: raw?.updatedAt || null,
+  };
+}
+
+async function saveBillingConfig(body) {
+  const ref = getDb().collection(DOC_PATH.collection).doc(DOC_PATH.doc);
+  const existing = (await ref.get()).data() || {};
+
+  const provider = GATEWAYS.includes(body.provider) ? body.provider : existing.provider || 'razorpay';
+  const payload = {
+    provider,
+    currency: String(body.currency || existing.currency || 'INR').trim().toUpperCase(),
+    enabled: body.enabled !== false,
+    updatedAt: getFieldValue().serverTimestamp(),
+  };
+
+  const newKeyId = String(body.keyId ?? '').trim();
+  if (newKeyId) {
+    payload.keyId = newKeyId;
+  } else if (existing.keyId) {
+    payload.keyId = existing.keyId;
+  }
+
+  const newSecret = String(body.keySecret || '').trim();
+  if (newSecret) {
+    payload.keySecret = encrypt(newSecret);
+  } else if (existing.keySecret) {
+    payload.keySecret = existing.keySecret;
+  }
+
+  if (provider === 'mock') {
+    payload.keyId = '';
+    payload.keySecret = '';
+  }
+
+  await ref.set(payload, { merge: true });
+  return getBillingConfigForAdmin();
+}
+
+async function testBillingConfig() {
+  const creds = await getPaymentCredentials();
+  if (creds.provider === 'mock') {
+    return { ok: true, provider: 'mock', message: 'Mock mode — payments auto-approve without a gateway.' };
+  }
+  if (creds.provider === 'stripe') {
+    return { ok: false, error: 'Stripe is not enabled yet. Use Razorpay for live payments.' };
+  }
+  if (!creds.keyId || !creds.keySecret) {
+    return { ok: false, error: 'Razorpay Key ID and Secret are required.' };
+  }
+
+  try {
+    const auth = Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString('base64');
+    await axios.get('https://api.razorpay.com/v1/orders?count=1', {
+      headers: { Authorization: `Basic ${auth}` },
+      timeout: 10000,
+    });
+    return { ok: true, provider: 'razorpay', message: 'Razorpay credentials verified successfully.' };
+  } catch (error) {
+    const msg = error.response?.data?.error?.description || error.message;
+    return { ok: false, error: `Razorpay test failed: ${msg}` };
+  }
+}
+
+module.exports = {
+  getBillingConfigForAdmin,
+  saveBillingConfig,
+  testBillingConfig,
+  getPaymentCredentials,
+  isPaymentConfigured,
+};

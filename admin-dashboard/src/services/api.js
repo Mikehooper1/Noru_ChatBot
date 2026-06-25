@@ -160,6 +160,14 @@ export const api = {
       body: JSON.stringify(data),
       timeoutMs: 45000,
     }),
+  getPlatformBilling: () => request('/api/platform/billing'),
+  savePlatformBilling: (data) =>
+    request('/api/platform/billing', { method: 'PUT', body: JSON.stringify(data) }),
+  testPlatformBilling: () =>
+    request('/api/platform/billing/test', { method: 'POST', body: JSON.stringify({}) }),
+  getPlatformPlans: () => request('/api/platform/plans'),
+  savePlatformPlans: (plans) =>
+    request('/api/platform/plans', { method: 'PUT', body: JSON.stringify({ plans }) }),
   testBot: async (businessId, message, sessionId) => {
     const res = await fetch(`${BASE_URL}/api/widget/message`, {
       method: 'POST',

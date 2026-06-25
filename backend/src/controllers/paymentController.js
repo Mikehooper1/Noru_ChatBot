@@ -5,17 +5,18 @@ const {
   activateMockPayment,
   activatePlan,
   isRazorpayConfigured,
-  PLANS,
+  getAllPlans,
 } = require('../services/paymentService');
+const { getPlan, DEFAULT_PLANS } = require('../services/planCatalogService');
 const { verifyCheckoutToken } = require('../services/checkoutService');
 const { getBusiness, getDb } = require('../firebase/admin');
-const { getPlan } = require('../constants/plans');
+const { getPaymentCredentials } = require('../services/billingConfigService');
 
 async function createOrder(req, res) {
   try {
     const userId = req.user.uid;
     const { planId, businessId } = req.body;
-    if (!planId || !PLANS[planId]) {
+    if (!planId || !DEFAULT_PLANS[planId]) {
       return res.status(400).json({ error: 'Valid planId required' });
     }
 
@@ -49,7 +50,7 @@ async function verifyPayment(req, res) {
       return res.status(400).json({ error: 'Missing payment details' });
     }
 
-    if (orderId?.startsWith('order_mock_') || !isRazorpayConfigured()) {
+    if (orderId?.startsWith('order_mock_') || !(await isRazorpayConfigured())) {
       const result = await activateMockPayment(userId, planId);
       return res.json(result);
     }
@@ -62,7 +63,12 @@ async function verifyPayment(req, res) {
 }
 
 async function getPlans(_req, res) {
-  res.json(Object.values(PLANS));
+  try {
+    const plans = await getAllPlans();
+    res.json(plans);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 }
 
 async function getCheckoutInfo(req, res) {
@@ -71,11 +77,14 @@ async function getCheckoutInfo(req, res) {
     const business = await getBusiness(payload.businessId);
     if (!business) return res.status(404).json({ error: 'Business not found' });
 
-    const plan = getPlan(payload.planId);
+    const plan = await getPlan(payload.planId);
     const paymentDoc = await getDb().collection('payments').doc(payload.orderId).get();
     if (!paymentDoc.exists) return res.status(404).json({ error: 'Order not found' });
 
     const payment = paymentDoc.data();
+    const configured = await isRazorpayConfigured();
+    const creds = configured ? await getPaymentCredentials() : { keyId: 'mock_key' };
+
     res.json({
       businessId: payload.businessId,
       planId: payload.planId,
@@ -84,8 +93,8 @@ async function getCheckoutInfo(req, res) {
       orderId: payload.orderId,
       amount: payment.amount,
       currency: payment.currency || 'INR',
-      keyId: isRazorpayConfigured() ? process.env.RAZORPAY_KEY_ID : 'mock_key',
-      mock: payment.provider === 'mock' || !isRazorpayConfigured(),
+      keyId: configured ? creds.keyId : 'mock_key',
+      mock: payment.provider === 'mock' || !configured,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -102,10 +111,10 @@ async function verifyPublicPayment(req, res) {
       return res.status(400).json({ error: 'Order mismatch' });
     }
 
-    const plan = getPlan(payload.planId);
+    const plan = await getPlan(payload.planId);
     let result;
 
-    if (payload.orderId.startsWith('order_mock_') || !isRazorpayConfigured()) {
+    if (payload.orderId.startsWith('order_mock_') || !(await isRazorpayConfigured())) {
       result = await activatePlan(payload.businessId, payload.planId);
     } else {
       const business = await getBusiness(payload.businessId);

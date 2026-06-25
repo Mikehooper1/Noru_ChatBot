@@ -1,5 +1,6 @@
 const { getBusiness, getDb, getFieldValue } = require('../firebase/admin');
-const { getPlan, PLANS } = require('../constants/plans');
+const { getPlan, getAllPlans, DEFAULT_PLANS } = require('./planCatalogService');
+const PLANS = DEFAULT_PLANS;
 
 const ADMIN_URL = process.env.ADMIN_DASHBOARD_URL || 'https://noruchatbotadmin.netlify.app';
 
@@ -112,7 +113,7 @@ async function checkPlanAccess(businessId, channel) {
   if (!business) return { allowed: false, reason: 'Business not found' };
 
   const planId = await getEffectivePlanForBusiness(business);
-  const plan = getPlan(planId);
+  const plan = await getPlan(planId);
   const usage = await getUsage(businessId);
 
   if (!plan.channels.includes(channel)) {
@@ -152,13 +153,14 @@ async function checkPlanAccess(businessId, channel) {
 
 async function checkRemindersAllowed(businessId) {
   const business = await getBusiness(businessId);
-  const plan = getPlan(await getEffectivePlanForBusiness(business));
+  const plan = await getPlan(await getEffectivePlanForBusiness(business));
   return plan.reminders === true;
 }
 
 module.exports = {
   PLANS,
   getPlan,
+  getAllPlans,
   getEffectivePlan,
   getEffectivePlanForBusiness,
   getUserPlan,

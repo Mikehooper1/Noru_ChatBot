@@ -65,8 +65,28 @@ export function channelAllowed(planId, channel) {
   return getPlanLimit(planId).channels.includes(channel);
 }
 
-export function getAgentLimit(planId) {
-  return getPlanLimit(planId).businesses;
+export function getAgentLimit(planId, plansMap = PLANS) {
+  return (plansMap[planId] || plansMap.free || PLANS.free).businesses;
+}
+
+export function formatPlanFromApi(plan) {
+  const price = Number(plan.price) || 0;
+  const priceLabel = price === 0 ? '₹0 / month' : `₹${price.toLocaleString('en-IN')} / month`;
+  let sessionRetention = '—';
+  if (plan.sessionRetentionHours) sessionRetention = `${plan.sessionRetentionHours} hours`;
+  else if (plan.sessionRetentionDays) sessionRetention = `${plan.sessionRetentionDays} days`;
+
+  return {
+    ...plan,
+    price,
+    priceLabel,
+    sessionRetention,
+    features: plan.features || [],
+  };
+}
+
+export function plansArrayToMap(plans) {
+  return Object.fromEntries(plans.map((p) => [p.id, formatPlanFromApi(p)]));
 }
 
 export function canCreateAgent(planId, ownedCount, isAdmin = false) {

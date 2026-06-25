@@ -19,6 +19,8 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import AgentsPage from './pages/AgentsPage';
 import BusinessesPage from './pages/BusinessesPage';
 import PlansPage from './pages/PlansPage';
+import PlatformBillingPage from './pages/PlatformBillingPage';
+import PlatformPlansPage from './pages/PlatformPlansPage';
 
 function FullScreenLoader({ label = 'Loading your workspace…' }) {
   return (
@@ -86,6 +88,8 @@ export default function App() {
       <Route path="/businesses" element={<ProtectedLayout><BusinessesPage /></ProtectedLayout>} />
       <Route path="/agents" element={<ProtectedLayout><AgentsPage /></ProtectedLayout>} />
       <Route path="/plans" element={<ProtectedLayout><PlansPage /></ProtectedLayout>} />
+      <Route path="/platform/billing" element={<ProtectedLayout><PlatformBillingPage /></ProtectedLayout>} />
+      <Route path="/platform/plans" element={<ProtectedLayout><PlatformPlansPage /></ProtectedLayout>} />
       <Route path="/flows" element={<ProtectedLayout><FlowsPage /></ProtectedLayout>} />
       <Route path="/services" element={<ProtectedLayout><ServicesPage /></ProtectedLayout>} />
       <Route path="/channels" element={<ProtectedLayout><ChannelsPage /></ProtectedLayout>} />

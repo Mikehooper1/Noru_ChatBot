@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { doc, updateDoc, serverTimestamp } from '../firebase/firestore';
 import { db } from '../firebase/firestore';
 import { useBusiness } from '../hooks/useBusiness';
 import { useAuth } from '../contexts/AuthContext';
-import { PLANS, getAgentLimit } from '../constants/plans';
+import { PLANS, getAgentLimit, formatPlanFromApi, plansArrayToMap } from '../constants/plans';
 import { Button } from '../components/shared/Button';
 import UpgradeChat from '../components/plans/UpgradeChat';
 import { api } from '../services/api';
+import { Spinner } from '../components/shared/Card';
 
 function loadRazorpayScript() {
   return new Promise((resolve) => {
@@ -26,9 +27,20 @@ export default function PlansPage() {
   const { ownedCount } = useBusiness();
   const [paying, setPaying] = useState(null);
   const [message, setMessage] = useState('');
+  const [plansMap, setPlansMap] = useState(PLANS);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+
+  useEffect(() => {
+    api
+      .getPlans()
+      .then((list) => setPlansMap(plansArrayToMap(list)))
+      .catch(() => setPlansMap(PLANS))
+      .finally(() => setLoadingPlans(false));
+  }, []);
 
   const currentPlan = userPlan || 'free';
-  const agentLimit = getAgentLimit(currentPlan);
+  const agentLimit = getAgentLimit(currentPlan, plansMap);
+  const planList = Object.values(plansMap).map(formatPlanFromApi);
 
   const startPayment = async (planId) => {
     if (planId === 'free') return;
@@ -37,6 +49,7 @@ export default function PlansPage() {
 
     try {
       const order = await api.createPaymentOrder(planId);
+      const planMeta = plansMap[planId] || PLANS[planId];
 
       if (order.mock || order.keyId === 'mock_key') {
         await api.verifyPayment({
@@ -46,7 +59,7 @@ export default function PlansPage() {
           planId,
         });
         await refreshUserProfile();
-        setMessage(`✅ ${PLANS[planId].name} plan activated! Valid for 30 days. You can create up to ${PLANS[planId].businesses} AI agents.`);
+        setMessage(`✅ ${planMeta.name} plan activated! Valid for 30 days. You can create up to ${planMeta.businesses} AI agents.`);
         setPaying(null);
         return;
       }
@@ -69,7 +82,7 @@ export default function PlansPage() {
               planId,
             });
             await refreshUserProfile();
-            setMessage(`✅ Payment successful! ${PLANS[planId].name} plan activated for 30 days.`);
+            setMessage(`✅ Payment successful! ${planMeta.name} plan activated for 30 days.`);
           } catch (err) {
             setMessage(`Payment verification failed: ${err.message}`);
           }
@@ -128,72 +141,85 @@ export default function PlansPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <UpgradeChat currentPlan={currentPlan} onSelectPlan={(planId) => startPayment(planId)} paying={paying} />
+      {loadingPlans ? (
+        <div className="flex items-center gap-2 text-ink-muted mb-8">
+          <Spinner /> Loading plans…
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <UpgradeChat
+              currentPlan={currentPlan}
+              plans={planList}
+              onSelectPlan={(planId) => startPayment(planId)}
+              paying={paying}
+            />
 
-        <div className="space-y-4">
-          <h3 className="font-semibold text-lg">What your AI agent does</h3>
-          <div className="space-y-3 text-sm text-gray-600">
-            <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
-              <span>💬</span>
-              <div><strong>Chat</strong> — AI talks to customers on Website, WhatsApp, Telegram</div>
-            </div>
-            <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
-              <span>📅</span>
-              <div><strong>Book</strong> — Takes appointments through conversation flows</div>
-            </div>
-            <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
-              <span>🔔</span>
-              <div><strong>Remind</strong> — Sends appointment reminders (Pro+)</div>
-            </div>
-            <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
-              <span>🤖</span>
-              <div><strong>Answer</strong> — AI handles questions flows don&apos;t cover</div>
+            <div className="space-y-4">
+              <h3 className="font-semibold text-lg">What your AI agent does</h3>
+              <div className="space-y-3 text-sm text-gray-600">
+                <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
+                  <span>💬</span>
+                  <div><strong>Chat</strong> — AI talks to customers on Website, WhatsApp, Telegram</div>
+                </div>
+                <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
+                  <span>📅</span>
+                  <div><strong>Book</strong> — Takes appointments through conversation flows</div>
+                </div>
+                <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
+                  <span>🔔</span>
+                  <div><strong>Remind</strong> — Sends appointment reminders (Pro+)</div>
+                </div>
+                <div className="flex gap-3 p-3 bg-gray-50 rounded-lg">
+                  <span>🤖</span>
+                  <div><strong>Answer</strong> — AI handles questions flows don&apos;t cover</div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {Object.values(PLANS).map((plan) => {
-          const isCurrent = currentPlan === plan.id;
-          return (
-            <div
-              key={plan.id}
-              className={`rounded-xl border p-6 flex flex-col ${
-                isCurrent ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
-              }`}
-            >
-              {isCurrent && <span className="text-xs font-semibold text-primary mb-2">CURRENT PLAN</span>}
-              <h3 className="text-xl font-bold">{plan.name}</h3>
-              <p className="text-3xl font-bold mt-2">{plan.priceLabel}</p>
-              <p className="text-xs text-gray-500 mt-1">Memory: {plan.sessionRetention}</p>
-              <ul className="mt-4 space-y-2 flex-1">
-                {plan.features.map((f) => (
-                  <li key={f} className="text-sm text-gray-600 flex items-start gap-2">
-                    <span className="text-green-500">✓</span> {f}
-                  </li>
-                ))}
-              </ul>
-              {plan.price > 0 ? (
-                <Button
-                  className="mt-6 w-full"
-                  disabled={isCurrent || paying === plan.id}
-                  onClick={() => startPayment(plan.id)}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {planList.map((plan) => {
+              const isCurrent = currentPlan === plan.id;
+              return (
+                <div
+                  key={plan.id}
+                  className={`rounded-xl border p-6 flex flex-col ${
+                    isCurrent ? 'border-primary ring-2 ring-primary/20' : 'border-gray-200'
+                  }`}
                 >
-                  {isCurrent ? 'Current Plan' : paying === plan.id ? 'Opening checkout...' : `Pay ₹${plan.price} — UPI / Card`}
-                </Button>
-              ) : isCurrent ? (
-                <Button variant="secondary" className="mt-6 w-full" disabled>Current Plan</Button>
-              ) : (
-                <Button variant="secondary" className="mt-6 w-full" onClick={downgradeToFree}>
-                  Switch to Free
-                </Button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                  {isCurrent && <span className="text-xs font-semibold text-primary mb-2">CURRENT PLAN</span>}
+                  <h3 className="text-xl font-bold">{plan.name}</h3>
+                  <p className="text-3xl font-bold mt-2">{plan.priceLabel}</p>
+                  <p className="text-xs text-gray-500 mt-1">Memory: {plan.sessionRetention}</p>
+                  <ul className="mt-4 space-y-2 flex-1">
+                    {plan.features.map((f) => (
+                      <li key={f} className="text-sm text-gray-600 flex items-start gap-2">
+                        <span className="text-green-500">✓</span> {f}
+                      </li>
+                    ))}
+                  </ul>
+                  {plan.price > 0 ? (
+                    <Button
+                      className="mt-6 w-full"
+                      disabled={isCurrent || paying === plan.id}
+                      onClick={() => startPayment(plan.id)}
+                    >
+                      {isCurrent ? 'Current Plan' : paying === plan.id ? 'Opening checkout...' : `Pay ₹${plan.price} — UPI / Card`}
+                    </Button>
+                  ) : isCurrent ? (
+                    <Button variant="secondary" className="mt-6 w-full" disabled>Current Plan</Button>
+                  ) : (
+                    <Button variant="secondary" className="mt-6 w-full" onClick={downgradeToFree}>
+                      Switch to Free
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

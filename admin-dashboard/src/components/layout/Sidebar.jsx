@@ -1,10 +1,13 @@
 import { NavLink } from 'react-router-dom';
 import { useLayout } from '../../contexts/LayoutContext';
-import { navSections } from '../../constants/navigation';
+import { useAuth } from '../../contexts/AuthContext';
+import { navSections, adminNavSection } from '../../constants/navigation';
 import Icon from '../shared/Icon';
 
 export default function Sidebar() {
   const { sidebarOpen, closeSidebar } = useLayout();
+  const { isAdmin } = useAuth();
+  const sections = isAdmin ? [...navSections, adminNavSection] : navSections;
 
   return (
     <>
@@ -41,7 +44,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
-          {navSections.map((section) => (
+          {sections.map((section) => (
             <div key={section.title}>
               <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 {section.title}

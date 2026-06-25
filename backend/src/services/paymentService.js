@@ -1,19 +1,18 @@
 const crypto = require('crypto');
 const axios = require('axios');
 const { getDb, getFieldValue, getBusiness } = require('../firebase/admin');
-const { getPlan, PLANS } = require('../constants/plans');
-
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-
-function isRazorpayConfigured() {
-  return !!(RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET);
-}
+const { getPlan, getAllPlans } = require('./planCatalogService');
+const { getPaymentCredentials, isPaymentConfigured } = require('./billingConfigService');
 
 async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
-  const plan = getPlan(planId);
+  const plan = await getPlan(planId);
   if (!plan || plan.pricePaise <= 0) {
     throw new Error('Invalid plan for payment');
+  }
+
+  const rawBilling = await getDb().collection('platform').doc('billing').get();
+  if (rawBilling.exists && rawBilling.data().enabled === false) {
+    throw new Error('Payments are temporarily disabled. Please try again later.');
   }
 
   const orderData = {
@@ -23,7 +22,8 @@ async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
     notes: { userId: userId || '', businessId: businessId || '', planId, userEmail: userEmail || '' },
   };
 
-  if (!isRazorpayConfigured()) {
+  const configured = await isPaymentConfigured();
+  if (!configured) {
     const mockOrderId = `order_mock_${Date.now()}`;
     await getDb().collection('payments').doc(mockOrderId).set({
       userId: userId || null,
@@ -45,7 +45,8 @@ async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
     };
   }
 
-  const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+  const { keyId, keySecret } = await getPaymentCredentials();
+  const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
   const response = await axios.post('https://api.razorpay.com/v1/orders', orderData, {
     headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
   });
@@ -66,19 +67,17 @@ async function createRazorpayOrder({ userId, businessId, planId, userEmail }) {
     orderId: response.data.id,
     amount: plan.pricePaise,
     currency: 'INR',
-    keyId: RAZORPAY_KEY_ID,
+    keyId,
     planName: plan.name,
     mock: false,
   };
 }
 
-function verifyRazorpaySignature(orderId, paymentId, signature) {
-  if (!isRazorpayConfigured()) return true;
+async function verifyRazorpaySignature(orderId, paymentId, signature) {
+  if (!(await isPaymentConfigured())) return true;
+  const { keySecret } = await getPaymentCredentials();
   const body = `${orderId}|${paymentId}`;
-  const expected = crypto
-    .createHmac('sha256', RAZORPAY_KEY_SECRET)
-    .update(body)
-    .digest('hex');
+  const expected = crypto.createHmac('sha256', keySecret).update(body).digest('hex');
   return expected === signature;
 }
 
@@ -118,7 +117,7 @@ async function activatePlan(businessId, planId, paymentDetails = {}) {
 }
 
 async function verifyAndActivate({ orderId, paymentId, signature, userId, planId }) {
-  if (!verifyRazorpaySignature(orderId, paymentId, signature)) {
+  if (!(await verifyRazorpaySignature(orderId, paymentId, signature))) {
     throw new Error('Payment verification failed');
   }
 
@@ -132,11 +131,11 @@ async function activateMockPayment(userId, planId) {
 }
 
 module.exports = {
-  PLANS,
-  isRazorpayConfigured,
+  isRazorpayConfigured: isPaymentConfigured,
   createRazorpayOrder,
   verifyAndActivate,
   activateMockPayment,
   activatePlan,
   activatePlanForUser,
+  getAllPlans,
 };

@@ -1,5 +1,6 @@
 const express = require('express');
 const { verifyFirebaseToken } = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/requireAdmin');
 const { getDailyAnalytics, getAnalyticsRange } = require('../controllers/analyticsController');
 const {
   getWhatsAppConfig,
@@ -16,6 +17,13 @@ const {
   testEmailConfig,
 } = require('../controllers/channelConfigController');
 const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
+const {
+  getPlatformBilling,
+  updatePlatformBilling,
+  testPlatformBilling,
+  getPlatformPlans,
+  updatePlatformPlans,
+} = require('../controllers/platformController');
 const { syncServicesToKnowledgeBase } = require('../services/catalogService');
 const SessionManager = require('../services/sessionManager');
 const { deliverAgentReply } = require('../services/conversationDeliveryService');
@@ -29,6 +37,12 @@ router.get('/api/analytics/daily', verifyFirebaseToken, getDailyAnalytics);
 router.get('/api/analytics/range', verifyFirebaseToken, getAnalyticsRange);
 router.get('/api/ai-config', verifyFirebaseToken, getAIConfig);
 router.put('/api/ai-config', verifyFirebaseToken, updateAIConfig);
+
+router.get('/api/platform/billing', verifyFirebaseToken, requireAdmin, getPlatformBilling);
+router.put('/api/platform/billing', verifyFirebaseToken, requireAdmin, updatePlatformBilling);
+router.post('/api/platform/billing/test', verifyFirebaseToken, requireAdmin, testPlatformBilling);
+router.get('/api/platform/plans', verifyFirebaseToken, requireAdmin, getPlatformPlans);
+router.put('/api/platform/plans', verifyFirebaseToken, requireAdmin, updatePlatformPlans);
 
 router.post('/api/services/sync-knowledge-base', verifyFirebaseToken, async (req, res) => {
   try {

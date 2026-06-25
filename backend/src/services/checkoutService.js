@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const { createRazorpayOrder } = require('./paymentService');
-const { getPlan } = require('../constants/plans');
+const { getPlan } = require('./planCatalogService');
 const { getBusiness } = require('../firebase/admin');
 
 const SECRET =
@@ -38,7 +38,7 @@ function verifyCheckoutToken(token) {
 }
 
 async function createCheckoutLink(businessId, planId) {
-  const plan = getPlan(planId);
+  const plan = await getPlan(planId);
   if (!plan || plan.pricePaise <= 0) {
     throw new Error('Invalid plan for checkout');
   }

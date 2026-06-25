@@ -7,8 +7,9 @@ const BOT_MESSAGES = [
   { role: 'bot', text: 'Choose a plan below to unlock more channels and longer chat memory. Pay securely with UPI or Card.' },
 ];
 
-export default function UpgradeChat({ currentPlan, onSelectPlan, paying }) {
+export default function UpgradeChat({ currentPlan, plans = Object.values(PLANS), onSelectPlan, paying }) {
   const [messages] = useState(BOT_MESSAGES);
+  const plansById = Object.fromEntries(plans.map((p) => [p.id, p]));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col h-[420px]">
@@ -16,7 +17,7 @@ export default function UpgradeChat({ currentPlan, onSelectPlan, paying }) {
         <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-lg">🤖</div>
         <div>
           <p className="font-semibold text-sm">Noru Upgrade Assistant</p>
-          <p className="text-xs opacity-80">Current plan: {PLANS[currentPlan]?.name || 'Free'}</p>
+          <p className="text-xs opacity-80">Current plan: {plansById[currentPlan]?.name || 'Free'}</p>
         </div>
       </div>
 
@@ -28,7 +29,7 @@ export default function UpgradeChat({ currentPlan, onSelectPlan, paying }) {
         ))}
 
         <div className="space-y-2 pt-2">
-          {Object.values(PLANS).filter((p) => p.id !== 'free').map((plan) => (
+          {plans.filter((p) => p.id !== 'free').map((plan) => (
             <div key={plan.id} className="bg-white border border-gray-200 rounded-lg p-3">
               <div className="flex justify-between items-start mb-2">
                 <div>
