@@ -4,6 +4,33 @@ const { getDb, getFieldValue, encrypt, decrypt } = require('../firebase/admin');
 const DOC_PATH = { collection: 'platform', doc: 'billing' };
 
 const GATEWAYS = ['razorpay', 'stripe', 'mock'];
+const PAYMENT_MODES = ['mock', 'razorpay_test', 'razorpay_live'];
+
+function detectKeyEnvironment(keyId) {
+  const id = String(keyId || '').trim();
+  if (id.startsWith('rzp_live_')) return 'live';
+  if (id.startsWith('rzp_test_')) return 'test';
+  return null;
+}
+
+function paymentModeFromConfig(raw, envCreds) {
+  if (raw?.paymentMode && PAYMENT_MODES.includes(raw.paymentMode)) {
+    return raw.paymentMode;
+  }
+  if (raw?.provider === 'mock' || (!raw && !envCreds.keyId)) return 'mock';
+  const env = raw?.environment || detectKeyEnvironment(raw?.keyId || envCreds.keyId) || 'test';
+  return env === 'live' ? 'razorpay_live' : 'razorpay_test';
+}
+
+function configFromPaymentMode(paymentMode) {
+  if (paymentMode === 'mock') {
+    return { provider: 'mock', environment: 'test', paymentMode };
+  }
+  if (paymentMode === 'razorpay_live') {
+    return { provider: 'razorpay', environment: 'live', paymentMode };
+  }
+  return { provider: 'razorpay', environment: 'test', paymentMode: 'razorpay_test' };
+}
 
 function maskKeyId(keyId) {
   if (!keyId) return '';
@@ -70,6 +97,8 @@ async function getBillingConfigForAdmin() {
 
   return {
     provider,
+    paymentMode: paymentModeFromConfig(raw, env),
+    environment: raw?.environment || detectKeyEnvironment(keyId) || 'test',
     keyId: keyId || '',
     keyIdMasked: maskKeyId(keyId),
     keySecretConfigured: hasSecret,
@@ -90,9 +119,19 @@ async function saveBillingConfig(body) {
   const ref = getDb().collection(DOC_PATH.collection).doc(DOC_PATH.doc);
   const existing = (await ref.get()).data() || {};
 
-  const provider = GATEWAYS.includes(body.provider) ? body.provider : existing.provider || 'razorpay';
+  const modeConfig = body.paymentMode
+    ? configFromPaymentMode(body.paymentMode)
+    : {
+        provider: GATEWAYS.includes(body.provider) ? body.provider : existing.provider || 'razorpay',
+        environment: body.environment === 'live' ? 'live' : 'test',
+        paymentMode: existing.paymentMode || 'razorpay_test',
+      };
+
+  const provider = modeConfig.provider;
   const payload = {
     provider,
+    paymentMode: modeConfig.paymentMode,
+    environment: modeConfig.environment,
     currency: String(body.currency || existing.currency || 'INR').trim().toUpperCase(),
     enabled: body.enabled !== false,
     updatedAt: getFieldValue().serverTimestamp(),
@@ -100,6 +139,15 @@ async function saveBillingConfig(body) {
 
   const newKeyId = String(body.keyId ?? '').trim();
   if (newKeyId) {
+    if (provider === 'razorpay') {
+      const keyEnv = detectKeyEnvironment(newKeyId);
+      if (modeConfig.environment === 'live' && keyEnv === 'test') {
+        throw new Error('Live mode requires a live key (rzp_live_...). Switch to Test mode for rzp_test_ keys.');
+      }
+      if (modeConfig.environment === 'test' && keyEnv === 'live') {
+        throw new Error('Test mode requires a test key (rzp_test_...). Switch to Live mode for rzp_live_ keys.');
+      }
+    }
     payload.keyId = newKeyId;
   } else if (existing.keyId) {
     payload.keyId = existing.keyId;
@@ -122,8 +170,9 @@ async function saveBillingConfig(body) {
 }
 
 async function testBillingConfig() {
+  const raw = await getRawBillingDoc();
   const creds = await getPaymentCredentials();
-  if (creds.provider === 'mock') {
+  if (creds.provider === 'mock' || raw?.paymentMode === 'mock') {
     return { ok: true, provider: 'mock', message: 'Mock mode — payments auto-approve without a gateway.' };
   }
   if (creds.provider === 'stripe') {
@@ -133,13 +182,20 @@ async function testBillingConfig() {
     return { ok: false, error: 'Razorpay Key ID and Secret are required.' };
   }
 
+  const env = raw?.environment || detectKeyEnvironment(creds.keyId) || 'test';
+
   try {
     const auth = Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString('base64');
     await axios.get('https://api.razorpay.com/v1/orders?count=1', {
       headers: { Authorization: `Basic ${auth}` },
       timeout: 10000,
     });
-    return { ok: true, provider: 'razorpay', message: 'Razorpay credentials verified successfully.' };
+    const modeLabel = env === 'live' ? 'Live' : 'Test (sandbox)';
+    return {
+      ok: true,
+      provider: 'razorpay',
+      message: `Razorpay ${modeLabel} credentials verified successfully.`,
+    };
   } catch (error) {
     const msg = error.response?.data?.error?.description || error.message;
     return { ok: false, error: `Razorpay test failed: ${msg}` };
