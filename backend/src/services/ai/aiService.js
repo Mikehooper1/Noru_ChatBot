@@ -1,5 +1,6 @@
 const { getBusinessAIConfig, logError } = require('../../firebase/admin');
 const { buildSystemPrompt, shouldHandoff } = require('./buildSystemPrompt');
+const { fetchActiveServices, buildCatalogKnowledgeText } = require('../catalogService');
 const geminiProvider = require('./geminiProvider');
 const { normalizeModel } = require('./modelMapping');
 const { resolveGeminiApiKeys } = require('../aiConfigService');
@@ -39,7 +40,16 @@ async function getAIResponse(businessId, conversationHistory, userMessage, sessi
     );
   }
 
-  const systemPrompt = buildSystemPrompt(aiConfig, sessionData, userRecords, businessType, channel);
+  const services = await fetchActiveServices(businessId);
+  const catalogText = buildCatalogKnowledgeText(services);
+  const systemPrompt = buildSystemPrompt(
+    aiConfig,
+    sessionData,
+    userRecords,
+    businessType,
+    channel,
+    catalogText
+  );
   const messages = formatMessages(conversationHistory, userMessage);
 
   try {

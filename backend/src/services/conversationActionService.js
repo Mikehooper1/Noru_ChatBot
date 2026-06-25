@@ -54,21 +54,32 @@ function parseModifyFields(message) {
   const result = {};
   const text = message || '';
 
-  const dateMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-  if (dateMatch) result.date = dateMatch[1];
+  const isoMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (isoMatch) {
+    result.date = isoMatch[1];
+  } else {
+    const dmyMatch = text.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b/);
+    if (dmyMatch) {
+      result.date = toIsoDate(Number(dmyMatch[3]), Number(dmyMatch[2]), Number(dmyMatch[1]));
+    } else {
+      const parsed = parseDateInput(text);
+      if (parsed) result.date = parsed;
+    }
+  }
 
-  const timeColon = text.match(/\b(\d{1,2}):(\d{2})\b/);
-  if (timeColon) {
-    result.time = `${timeColon[1].padStart(2, '0')}:${timeColon[2]}`;
+  const parsedTime = parseTimeInput(text);
+  if (parsedTime) {
+    result.time = parsedTime;
     return result;
   }
 
   const timePhrase = text.match(
-    /\b(?:time\s+(?:to|at)|change\s+time\s+(?:to|at)|update\s+time\s+(?:to|at)|reschedule\s+(?:to|at)|(?:to|at))\s+(\d{1,2})(?::(\d{2}))?\b/i
+    /\b(?:time\s+(?:to|at)|change\s+time\s+(?:to|at)|update\s+time\s+(?:to|at)|reschedule\s+(?:to|at)|(?:to|at))\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i
   );
   if (timePhrase) {
-    result.time = `${timePhrase[1].padStart(2, '0')}:${timePhrase[2] || '00'}`;
-    return result;
+    result.time = parseTimeInput(
+      `${timePhrase[1]}${timePhrase[2] ? `:${timePhrase[2]}` : ''}${timePhrase[3] ? ` ${timePhrase[3]}` : ''}`
+    );
   }
 
   return result;
@@ -114,24 +125,134 @@ function getRecallQuickReplies(records = [], businessType = '') {
   return ['Book appointment'];
 }
 
+function toIsoDate(year, month, day) {
+  const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() + 1 !== month || d.getUTCDate() !== day) {
+    return null;
+  }
+  return iso;
+}
+
+function parseDateInput(input) {
+  const text = (input || '').trim();
+  if (!text) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return toIsoDate(...text.split('-').map(Number)) || null;
+  }
+
+  const dmy = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmy) {
+    return toIsoDate(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
+  }
+
+  const ymdSlash = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (ymdSlash) {
+    return toIsoDate(Number(ymdSlash[1]), Number(ymdSlash[2]), Number(ymdSlash[3]));
+  }
+
+  const lower = text.toLowerCase();
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  if (/^today$/i.test(lower)) {
+    return toIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  }
+  if (/^tomorrow$/i.test(lower)) {
+    const t = new Date(today);
+    t.setDate(t.getDate() + 1);
+    return toIsoDate(t.getFullYear(), t.getMonth() + 1, t.getDate());
+  }
+
+  const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const nextDay = lower.match(/^next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i);
+  if (nextDay) {
+    const target = weekdays.indexOf(nextDay[1].toLowerCase());
+    const d = new Date(today);
+    const current = d.getDay();
+    let daysAhead = (target - current + 7) % 7;
+    if (daysAhead === 0) daysAhead = 7;
+    d.setDate(d.getDate() + daysAhead);
+    return toIsoDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }
+
+  const monthNames = {
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+    may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
+  };
+  const namedDate = lower.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)(?:\s+(\d{4}))?$/i)
+    || lower.match(/^([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s+(\d{4}))?$/i);
+  if (namedDate) {
+    let day;
+    let monthKey;
+    let year;
+    if (/^\d/.test(namedDate[1])) {
+      day = Number(namedDate[1]);
+      monthKey = namedDate[2].toLowerCase();
+      year = Number(namedDate[3]) || today.getFullYear();
+    } else {
+      monthKey = namedDate[1].toLowerCase();
+      day = Number(namedDate[2]);
+      year = Number(namedDate[3]) || today.getFullYear();
+    }
+    const month = monthNames[monthKey];
+    if (month) return toIsoDate(year, month, day);
+  }
+
+  return null;
+}
+
+function normalizeDateInput(input) {
+  return parseDateInput(input);
+}
+
 function normalizeTime(time) {
-  if (!time) return '09:00';
-  const trimmed = String(time).trim();
-  if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
-    const [h, m] = trimmed.split(':');
-    return `${h.padStart(2, '0')}:${m}`;
+  const parsed = parseTimeInput(time);
+  return parsed || '09:00';
+}
+
+function parseTimeInput(input) {
+  if (!input) return null;
+  const text = String(input).trim().toLowerCase();
+
+  const ampm = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)$/i);
+  if (ampm) {
+    let hour = parseInt(ampm[1], 10);
+    const minute = ampm[2] || '00';
+    const period = ampm[3].toLowerCase().replace(/\./g, '');
+    if (period.startsWith('p') && hour < 12) hour += 12;
+    if (period.startsWith('a') && hour === 12) hour = 0;
+    if (hour >= 0 && hour <= 23) return `${String(hour).padStart(2, '0')}:${minute.padStart(2, '0')}`;
   }
-  if (/^\d{1,2}$/.test(trimmed)) {
-    return `${trimmed.padStart(2, '0')}:00`;
+
+  const colon = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (colon) {
+    const hour = parseInt(colon[1], 10);
+    const minute = colon[2];
+    if (hour >= 0 && hour <= 23) return `${String(hour).padStart(2, '0')}:${minute}`;
   }
-  return trimmed.substring(0, 5);
+
+  if (/^\d{1,2}$/.test(text)) {
+    const hour = parseInt(text, 10);
+    if (hour >= 0 && hour <= 23) return `${String(hour).padStart(2, '0')}:00`;
+  }
+
+  const atTime = text.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (atTime) {
+    return parseTimeInput(`${atTime[1]}${atTime[2] ? `:${atTime[2]}` : ''}${atTime[3] ? ` ${atTime[3]}` : ''}`);
+  }
+
+  return null;
 }
 
 function isValidDate(dateStr) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) return false;
-  const d = new Date(`${dateStr}T12:00:00`);
-  return !Number.isNaN(d.getTime());
+  return !!parseDateInput(dateStr);
 }
+
+const DATE_FORMAT_HINT = 'e.g. 25-06-2026, 25/06/2026, tomorrow, or next Monday';
 
 async function fetchUserRecords(businessId, conv) {
   const db = getDb();
@@ -250,8 +371,8 @@ async function handleModifyRequest({ message, conv, businessId, businessType, co
     return { reply: buildModifyCompleteReply(updated, businessType), action: 'modify_complete' };
   }
 
-  if (session.lastAction === 'recall' && isValidDate(text)) {
-    const updated = await updateAppointmentRecord(target.id, { date: text });
+  if (session.lastAction === 'recall' && normalizeDateInput(text)) {
+    const updated = await updateAppointmentRecord(target.id, { date: normalizeDateInput(text) });
     await updateSession(conversationId, {
       currentFlowId: null,
       currentStepId: null,
@@ -261,7 +382,7 @@ async function handleModifyRequest({ message, conv, businessId, businessType, co
   }
 
   if (fields.date && !isValidDate(fields.date)) {
-    return { reply: 'Please provide a valid date in DD-MM-YYYY format (e.g. 2026-06-26).', action: 'modify' };
+    return { reply: `Please provide a valid date (${DATE_FORMAT_HINT}).`, action: 'modify' };
   }
 
   if (fields.time || fields.date) {
@@ -357,7 +478,7 @@ async function startModifyPrompt({
 
   if (pending === 'date') {
     return {
-      reply: `Your ${modifyMode.serviceName} appointment is on ${modifyMode.date}. What date would you prefer? (DD-MM-YYYY)`,
+      reply: `Your ${modifyMode.serviceName} appointment is on ${modifyMode.date}. What date would you prefer? (${DATE_FORMAT_HINT})`,
       action: 'modify',
     };
   }
@@ -379,9 +500,9 @@ async function handleModifyFollowUp({ message, conv, businessId, businessType, c
   const pending = mode.pending;
 
   if (pending === 'date' || (!pending && fields.date && !fields.time)) {
-    const date = fields.date || (isValidDate(text) ? text : null);
+    const date = fields.date || normalizeDateInput(text);
     if (!date) {
-      return { reply: 'Please enter a valid date in DD-MM-YYYY format (e.g. 2026-06-26).', action: 'modify' };
+      return { reply: `Please enter a valid date (${DATE_FORMAT_HINT}).`, action: 'modify' };
     }
     const updated = await updateAppointmentRecord(mode.appointmentId, { date });
     await updateSession(conversationId, {
@@ -391,9 +512,9 @@ async function handleModifyFollowUp({ message, conv, businessId, businessType, c
   }
 
   if (pending === 'time' || fields.time || isTimeOnlyInput(text)) {
-    const time = fields.time || (isTimeOnlyInput(text) ? normalizeTime(text) : null);
+    const time = fields.time || parseTimeInput(text) || (isTimeOnlyInput(text) ? normalizeTime(text) : null);
     if (!time) {
-      return { reply: 'Please enter a valid time (e.g. 14:30 or 13).', action: 'modify' };
+      return { reply: 'Please enter a valid time (e.g. 2:30 PM, 14:30, or 2pm).', action: 'modify' };
     }
     const updated = await updateAppointmentRecord(mode.appointmentId, { time });
     await updateSession(conversationId, {
@@ -406,7 +527,7 @@ async function handleModifyFollowUp({ message, conv, businessId, businessType, c
     mode.pending = 'date';
     await updateSession(conversationId, { sessionData: { ...session, modifyMode: mode } });
     return {
-      reply: `What date would you prefer for your ${mode.serviceName} appointment? (DD-MM-YYYY)`,
+      reply: `What date would you prefer for your ${mode.serviceName} appointment? (${DATE_FORMAT_HINT})`,
       action: 'modify',
     };
   }
@@ -421,7 +542,7 @@ async function handleModifyFollowUp({ message, conv, businessId, businessType, c
   }
 
   return {
-    reply: `Please tell me the new date (DD-MM-YYYY) or time (e.g. 14:30) for your ${mode.serviceName} appointment.`,
+    reply: `Please tell me the new date (${DATE_FORMAT_HINT}) or time (e.g. 2:30 PM) for your ${mode.serviceName} appointment.`,
     quickReplies: ['Change date', 'Change time'],
     action: 'modify',
   };
@@ -625,14 +746,15 @@ async function executeAIActions(actions, { businessId, conversationId, conv, bus
 
     if (action.type === 'BOOK_APPOINTMENT') {
       const { serviceName, date, time, notes } = action.data;
-      if (!date) continue;
+      const normalizedDate = normalizeDateInput(date) || date;
+      if (!normalizedDate || !isValidDate(normalizedDate)) continue;
       const record = await createAppointmentRecord({
         businessId,
         conversationId,
         conv,
         serviceName,
-        date,
-        time,
+        date: normalizedDate,
+        time: parseTimeInput(time) || normalizeTime(time),
         notes,
         source: 'ai',
       });
@@ -705,7 +827,11 @@ module.exports = {
   parseModifyFields,
   isTimeOnlyInput,
   isValidDate,
+  parseDateInput,
+  normalizeDateInput,
+  parseTimeInput,
   normalizeTime,
+  DATE_FORMAT_HINT,
   fetchUserRecords,
   getTargetRecord,
   formatRecallResponse,

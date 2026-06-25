@@ -306,11 +306,12 @@ async function handleWidgetStart({ businessId, sessionId, userName, userPhone })
   return {
     sessionId: userId,
     conversationId: conversation.id,
-    welcome: session.welcome,
-    recallPrompt: session.recallPrompt,
-    existingRecords: session.existingRecords,
+    welcome: session.resumed ? null : session.welcome,
+    recallPrompt: session.resumed ? null : session.recallPrompt,
+    existingRecords: session.resumed ? null : session.existingRecords,
     quickReplies: session.quickReplies,
-    action: 'welcome_sent',
+    resumed: session.resumed || false,
+    action: session.resumed ? 'session_resumed' : 'welcome_sent',
   };
 }
 
@@ -326,6 +327,55 @@ async function handleWidgetMessage({ businessId, sessionId, message, userName, u
   });
 
   return { ...result, sessionId: userId, conversationId: result.conversationId };
+}
+
+async function getWidgetConversationHistory({ businessId, sessionId, conversationId }) {
+  const { getDb } = require('../firebase/admin');
+  if (!businessId || (!sessionId && !conversationId)) return { messages: [], conversationId: null };
+
+  let convId = conversationId;
+
+  if (!convId && sessionId) {
+    const convSnap = await getDb()
+      .collection('conversations')
+      .where('businessId', '==', businessId)
+      .where('channel', '==', 'website')
+      .where('userId', '==', sessionId)
+      .limit(1)
+      .get();
+    if (convSnap.empty) return { messages: [], conversationId: null };
+    convId = convSnap.docs[0].id;
+  }
+
+  const msgSnap = await getDb()
+    .collection('conversations')
+    .doc(convId)
+    .collection('messages')
+    .orderBy('timestamp', 'asc')
+    .get();
+
+  const messages = msgSnap.docs
+    .map((d) => {
+      const data = d.data();
+      const ts = data.timestamp?.toDate?.()?.getTime()
+        || (data.timestamp?.seconds ? data.timestamp.seconds * 1000 : 0);
+      return {
+        id: d.id,
+        role: data.role,
+        content: data.content,
+        timestamp: ts,
+        quickReplies: data.metadata?.quickReplies || [],
+      };
+    })
+    .filter((m) => m.role === 'bot' || m.role === 'user');
+
+  const lastBot = [...messages].reverse().find((m) => m.role === 'bot');
+
+  return {
+    messages,
+    conversationId: convId,
+    quickReplies: lastBot?.quickReplies || [],
+  };
 }
 
 async function getWidgetAgentMessages({ businessId, sessionId, conversationId, after }) {
@@ -373,4 +423,5 @@ module.exports = {
   handleWidgetMessage,
   handleWidgetStart,
   getWidgetAgentMessages,
+  getWidgetConversationHistory,
 };

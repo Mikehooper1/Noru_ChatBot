@@ -177,6 +177,11 @@ function initWidget() {
         localStorage.setItem(convStorageKey, conversationId);
       }
 
+      if (data.resumed) {
+        await loadConversationHistory();
+        return;
+      }
+
       if (data.welcome) chatUI.addMessage(data.welcome, 'bot');
       if (data.recallPrompt) chatUI.addMessage(data.recallPrompt, 'bot');
       if (data.existingRecords) chatUI.addMessage(data.existingRecords, 'bot');
@@ -184,6 +189,34 @@ function initWidget() {
     } catch {
       const fallback = widgetConfig?.welcomeMessage || 'Hello! How can I help you today?';
       chatUI.addMessage(userName ? `Hi ${userName}! ${fallback}` : fallback, 'bot');
+    }
+  }
+
+  async function loadConversationHistory() {
+    if (!sessionId && !conversationId) return;
+    try {
+      const params = new URLSearchParams({ businessId });
+      if (sessionId) params.set('sessionId', sessionId);
+      if (conversationId) params.set('conversationId', conversationId);
+      const res = await fetch(`${backendUrl}/api/widget/history?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.conversationId) {
+        conversationId = data.conversationId;
+        localStorage.setItem(convStorageKey, conversationId);
+      }
+      chatUI.clearMessages();
+      for (const msg of data.messages || []) {
+        if (!msg.content) continue;
+        const role = msg.role === 'user' ? 'user' : 'bot';
+        chatUI.addMessage(msg.content, role, msg.id);
+        if (msg.id) seenMessageIds.add(msg.id);
+      }
+      chatUI.showQuickReplies(data.quickReplies || []);
+      const lastTs = (data.messages || []).reduce((max, m) => Math.max(max, m.timestamp || 0), 0);
+      if (lastTs) lastPollAt = lastTs;
+    } catch {
+      // ignore history load errors
     }
   }
 
@@ -242,10 +275,10 @@ function initWidget() {
       if (open) {
         startPolling();
         pollAgentMessages();
-        if (chatUI.introComplete) {
-          startChatSession({ fresh: true });
-          chatUI.input.focus();
+        if (chatUI.introComplete && conversationId) {
+          loadConversationHistory();
         }
+        chatUI.input?.focus();
       } else {
         stopPolling();
       }
@@ -255,6 +288,11 @@ function initWidget() {
 
     if (savedUser?.name && savedUser?.phone) {
       chatUI.setIntroComplete(savedUser.name, savedUser.phone);
+      if (conversationId) {
+        loadConversationHistory();
+      } else {
+        startChatSession({ fresh: true });
+      }
     }
 
     chatUI.onIntroComplete = (userData) => {

@@ -127,6 +127,11 @@ export const api = {
     request(`/api/ai-config?businessId=${encodeURIComponent(businessId)}`),
   saveAIConfig: (data) =>
     request('/api/ai-config', { method: 'PUT', body: JSON.stringify(data) }),
+  syncServicesToKnowledgeBase: (businessId) =>
+    request('/api/services/sync-knowledge-base', {
+      method: 'POST',
+      body: JSON.stringify({ businessId }),
+    }),
   getWhatsAppConfig: (businessId) =>
     request(`/api/channels/whatsapp?businessId=${encodeURIComponent(businessId)}`),
   saveWhatsAppConfig: (data) =>

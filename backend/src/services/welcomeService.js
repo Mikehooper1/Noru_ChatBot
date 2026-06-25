@@ -99,10 +99,16 @@ async function buildSessionWelcome({ conversation, businessId, flowQuickReplies 
 }
 
 async function sendSessionWelcome(conversation, businessId, flowQuickReplies = []) {
+  if (conversation.sessionWelcomeSent) {
+    const session = await buildSessionWelcome({ conversation, businessId, flowQuickReplies });
+    return { ...session, resumed: true };
+  }
+
   const session = await buildSessionWelcome({ conversation, businessId, flowQuickReplies });
   const records = await fetchUserRecords(businessId, conversation);
 
   await SessionManager.updateConversation(conversation.id, {
+    sessionWelcomeSent: true,
     sessionData: {
       ...(conversation.sessionData || {}),
       recalledRecordIds: records.map((r) => r.id),
@@ -120,7 +126,7 @@ async function sendSessionWelcome(conversation, businessId, flowQuickReplies = [
 
   await trackEvent(businessId, conversation.channel || 'website', 'message_sent');
 
-  return session;
+  return { ...session, resumed: false };
 }
 
 module.exports = {

@@ -11,7 +11,10 @@ const {
   detectCancelIntent,
   getRecallQuickReplies,
   isValidDate,
+  normalizeDateInput,
+  parseTimeInput,
   normalizeTime,
+  DATE_FORMAT_HINT,
   fetchUserRecords,
   formatRecallResponse,
   createAppointmentRecord,
@@ -21,6 +24,7 @@ const {
   handleModifyRequest,
   isTimeOnlyInput,
 } = require('./conversationActionService');
+const { handleBudgetQuery, parseBudgetFromMessage } = require('./catalogService');
 const { isHealthBusiness, resolveClinicMessage } = require('./clinicQuestionService');
 
 const GREETING_PATTERN = /^(hi|hello|hey|hola|namaste|start|menu|good\s*(morning|afternoon|evening)|yo|sup)[!.?\s]*$/i;
@@ -38,7 +42,19 @@ function normalizeText(text) {
 function textsMatch(a, b) {
   const x = normalizeText(a);
   const y = normalizeText(b);
-  return x === y || x.includes(y) || y.includes(x);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  // Allow prefix match only for short quick-reply labels
+  if (x.length <= 40 && y.length <= 40) {
+    return x.startsWith(y) || y.startsWith(x);
+  }
+  return false;
+}
+
+function isWelcomeStep(step) {
+  if (!step) return false;
+  const msg = (step.message || '').toLowerCase();
+  return /\bwelcome\b/.test(msg) || /^how can (we|i) help/.test(msg);
 }
 
 class FlowEngine {
@@ -146,9 +162,9 @@ class FlowEngine {
     return sessionData;
   }
 
-  repromptStep(step) {
+  repromptStep(step, hint) {
     return {
-      reply: step.message,
+      reply: hint || step.message,
       quickReplies: step.quickReplies || [],
       action: null,
     };
@@ -179,15 +195,16 @@ class FlowEngine {
 
     if (!date) {
       return {
-        reply: step.message || 'Let me confirm your booking details. What date works for you? (DD-MM-YYYY)',
+        reply: step.message || `Let me confirm your booking details. What date works for you? (${DATE_FORMAT_HINT})`,
         quickReplies: [],
         action: null,
       };
     }
 
-    if (!isValidDate(date)) {
+    const normalizedDate = normalizeDateInput(date) || date;
+    if (!isValidDate(normalizedDate)) {
       return {
-        reply: 'Please enter a valid date in DD-MM-YYYY format (e.g. 2026-06-15).',
+        reply: `Please enter a valid date (${DATE_FORMAT_HINT}).`,
         quickReplies: [],
         action: null,
       };
@@ -200,7 +217,7 @@ class FlowEngine {
       conversationId: this.conversationId,
       conv: freshConv,
       serviceName,
-      date,
+      date: normalizedDate,
       time,
       notes: JSON.stringify(session),
       source: 'flow',
@@ -211,7 +228,7 @@ class FlowEngine {
       currentStepId: null,
     });
 
-    const summary = `✅ Booking confirmed!\n\nService: ${serviceName}\nDate: ${date}\nTime: ${time}\n\nWe look forward to seeing you!`;
+    const summary = `✅ Booking confirmed!\n\nService: ${serviceName}\nDate: ${normalizedDate}\nTime: ${time}\n\nWe look forward to seeing you!`;
 
     return {
       reply: step.message ? `${step.message}\n\n${summary}` : summary,
@@ -300,7 +317,7 @@ class FlowEngine {
       const nextFromChoice = this.resolveNextStepId(currentStep, sanitizedInput);
       if (nextFromChoice === null && !currentStep.inputType) {
         return {
-          reply: `Please select one of the options below:\n\n${currentStep.message}`,
+          reply: 'Please select one of the options below:',
           quickReplies: currentStep.quickReplies || [],
           action: null,
         };
@@ -318,21 +335,29 @@ class FlowEngine {
 
     const sessionKey = resolveSessionKey(currentStep);
     if (sessionKey) {
-      if (sessionKey === 'date' && !isValidDate(sanitizedInput)) {
-        if (isTimeOnlyInput(sanitizedInput)) {
+      if (sessionKey === 'date') {
+        const parsedDate = normalizeDateInput(sanitizedInput);
+        if (!parsedDate) {
+          if (isTimeOnlyInput(sanitizedInput)) {
+            return {
+              reply: 'That looks like a time. Say "change time to 2:30 PM" to update your appointment, or enter a date.',
+              quickReplies: ['Change time'],
+              action: null,
+            };
+          }
           return {
-            reply: 'That looks like a time. Say "change time to 14:30" to update your appointment, or enter a date as DD-MM-YYYY.',
-            quickReplies: ['Change time'],
+            reply: `Please enter a valid date (${DATE_FORMAT_HINT}).`,
+            quickReplies: currentStep.quickReplies || [],
             action: null,
           };
         }
-        return {
-          reply: 'Please enter a valid date in DD-MM-YYYY format (e.g. 2026-06-15).',
-          quickReplies: currentStep.quickReplies || [],
-          action: null,
-        };
+        sessionUpdate[sessionKey] = parsedDate;
+      } else if (sessionKey === 'time') {
+        const parsedTime = parseTimeInput(sanitizedInput) || normalizeTime(sanitizedInput);
+        sessionUpdate[sessionKey] = parsedTime;
+      } else {
+        sessionUpdate[sessionKey] = sanitizedInput;
       }
-      sessionUpdate[sessionKey] = sessionKey === 'time' ? normalizeTime(sanitizedInput) : sanitizedInput;
     }
 
     await this.saveSession(sessionUpdate);
@@ -370,9 +395,14 @@ class FlowEngine {
     return this.renderStep(flow, nextStep);
   }
 
-  async startFlow(flow) {
-    const firstStep = flow.steps?.[0];
+  async startFlow(flow, { skipWelcomeStep = false } = {}) {
+    let firstStep = flow.steps?.[0];
     if (!firstStep) return null;
+
+    if (skipWelcomeStep && isWelcomeStep(firstStep)) {
+      const nextId = firstStep.nextStepId || flow.steps?.[1]?.id;
+      firstStep = flow.steps?.find((s) => s.id === nextId) || flow.steps?.[1] || firstStep;
+    }
 
     await SessionManager.updateConversation(this.conversationId, {
       currentFlowId: flow.id,
@@ -387,7 +417,12 @@ class FlowEngine {
     const flow = await this.getFlowById(conv.currentFlowId);
     const step = flow?.steps?.find((s) => s.id === conv.currentStepId);
     if (!step) return null;
-    return this.repromptStep(step);
+    const hint = step.inputType === 'date'
+      ? `Please share a date (${DATE_FORMAT_HINT}).`
+      : step.inputType === 'text' && /time/i.test(step.message || '')
+        ? 'Please share a time (e.g. 2:30 PM or 14:30).'
+        : null;
+    return this.repromptStep(step, hint);
   }
 
   async showFlowMenu(flows, business, aiConfig) {
@@ -434,12 +469,13 @@ class FlowEngine {
     const flows = await this.loadFlows();
 
     const session = conv.sessionData || {};
+    const businessType = business?.type || '';
 
     if (conv.status === 'handoff') {
       return { reply: null, action: 'handoff_active' };
     }
 
-    if (detectBookIntent(sanitized)) {
+    if (detectBookIntent(sanitized) && !conv.currentFlowId) {
       let bookFlow = this.matchFlow(sanitized, flows);
       if (!bookFlow) {
         bookFlow = flows.find((f) => textsMatch(sanitized, f.name) || textsMatch(sanitized, f.trigger));
@@ -448,8 +484,16 @@ class FlowEngine {
         await SessionManager.updateConversation(this.conversationId, {
           sessionData: { ...session, modifyMode: null, lastAction: null, recalledRecordIds: [] },
         });
-        return this.startFlow(bookFlow);
+        const skipWelcome = conv.welcomeSent || conv.sessionWelcomeSent;
+        return this.startFlow(bookFlow, { skipWelcomeStep: skipWelcome });
       }
+    }
+
+    const budgetResult = await handleBudgetQuery(sanitized, this.businessId, businessType);
+    if (budgetResult) {
+      const budget = parseBudgetFromMessage(sanitized);
+      await this.saveSession({ budget, lastAction: 'catalog' });
+      return budgetResult;
     }
 
     if (session.modifyMode || detectModifyIntent(sanitized) || detectCancelIntent(sanitized)) {
@@ -466,7 +510,6 @@ class FlowEngine {
 
     if (detectRecallIntent(sanitized)) {
       const records = await fetchUserRecords(this.businessId, conv);
-      const businessType = business?.type || '';
       await SessionManager.updateConversation(this.conversationId, {
         currentFlowId: null,
         currentStepId: null,
@@ -484,7 +527,6 @@ class FlowEngine {
       };
     }
 
-    const businessType = business?.type || '';
     if (isHealthBusiness(businessType)) {
       const clinicResult = resolveClinicMessage(sanitized, businessType);
       if (clinicResult?.action === 'urgent' || clinicResult?.action === 'handoff') {
@@ -531,7 +573,8 @@ class FlowEngine {
     }
 
     if (matchedFlow && !this.shouldSkipFlowStart(sanitized, session)) {
-      return this.startFlow(matchedFlow);
+      const skipWelcome = conv.welcomeSent || conv.sessionWelcomeSent;
+      return this.startFlow(matchedFlow, { skipWelcomeStep: skipWelcome });
     }
 
     if (shouldHandoff(sanitized, aiConfig)) {

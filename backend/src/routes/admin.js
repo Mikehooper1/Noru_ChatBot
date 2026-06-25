@@ -16,6 +16,7 @@ const {
   testEmailConfig,
 } = require('../controllers/channelConfigController');
 const { getAIConfig, updateAIConfig } = require('../controllers/aiConfigController');
+const { syncServicesToKnowledgeBase } = require('../services/catalogService');
 const SessionManager = require('../services/sessionManager');
 const { deliverAgentReply } = require('../services/conversationDeliveryService');
 const { trackEvent } = require('../services/analyticsService');
@@ -28,6 +29,20 @@ router.get('/api/analytics/daily', verifyFirebaseToken, getDailyAnalytics);
 router.get('/api/analytics/range', verifyFirebaseToken, getAnalyticsRange);
 router.get('/api/ai-config', verifyFirebaseToken, getAIConfig);
 router.put('/api/ai-config', verifyFirebaseToken, updateAIConfig);
+
+router.post('/api/services/sync-knowledge-base', verifyFirebaseToken, async (req, res) => {
+  try {
+    const { businessId } = req.body;
+    if (!businessId) {
+      return res.status(400).json({ error: 'businessId is required' });
+    }
+    const result = await syncServicesToKnowledgeBase(businessId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/api/channels/whatsapp', verifyFirebaseToken, getWhatsAppConfig);
 router.put('/api/channels/whatsapp', verifyFirebaseToken, updateWhatsAppConfig);
 router.post('/api/channels/whatsapp/test', verifyFirebaseToken, testWhatsAppConfig);

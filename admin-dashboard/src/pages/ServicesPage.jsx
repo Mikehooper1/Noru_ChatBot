@@ -6,7 +6,8 @@ export default function ServicesPage() {
 
   return (
     <div className="page-container">
-      <h2 className="text-2xl font-bold mb-6">Services</h2>
+      <h2 className="text-2xl font-bold mb-2">Products & Services</h2>
+      <p className="text-gray-600 mb-6">Manage your catalog — the AI agent uses these items for recommendations, budget checks, and bookings.</p>
       {currentBusiness && <ServicesTable businessId={currentBusiness.id} />}
     </div>
   );
